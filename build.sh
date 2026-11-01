@@ -21,6 +21,11 @@
 #   ./build.sh --btrfs         installer default: btrfs zstd:22 (instead of ext4)
 #   ./build.sh --erofs         image type erofs (instead of squashfs)
 #   ./build.sh --no-cccu       skip CCCU (the container creator)
+#   ./build.sh --installer-mode=clone|new|distro
+#                              ClaudeInstall's mode: clone (default) installs the cloned live ISO;
+#                              new = new-system installer (users, packages); distro = the claudemods
+#                              distributions online (pacstrap + profile, Arch only)
+#   ./build.sh --installer-tui also build the terminal installer (claudeinstall-tui)
 #   ./build.sh --no-launch     do not start the app at the end
 #   ./build.sh help            this text
 set -e
@@ -331,7 +336,8 @@ install_pkexec() {
     command -v pkexec >/dev/null 2>&1 || say "pkexec could not be installed - the app's root tasks and the Install shortcut need it"
 }
 
-# Called through as_root: $1 family, $2 installer (1/0), $3 alpine tools (1/0), $4 gui (1/0)
+# Called through as_root: $1 family, $2 installer (1/0), $3 alpine tools (1/0), $4 gui (1/0),
+# $5 cccu (1/0, optional)
 root_phase() {
     detect_family
     [ "$1" = "$FAMILY" ] || die "the distro detected as root differs ($DISTRO_NAME)"
@@ -345,9 +351,9 @@ root_phase() {
         if [ "$3" = 1 ]; then install_alpine_installer_tools; fi
     elif [ "$2" = 1 ]; then
         install_installer_runtime
-        say "Installing ClaudeInstall's build dependencies (installer/build.sh deps)"
-        sh "$INSTALLER/build.sh" deps --clone --gui
+        install_claudeinstall_deps
     fi
+    if [ "${5:-0}" = 1 ]; then install_cccu_deps "$4"; fi
 }
 
 # =============================================================================
@@ -685,6 +691,206 @@ EOF
     rm -f /usr/local/bin/claudebackup-calamares /usr/local/lib/claudebackup/calamares-root.sh
 }
 
+# =============================================================================
+# ClaudeInstall (installer/): dependencies, build, install. Clone mode, Qt6 GUI.
+# (Was installer/build.sh; merged here so the compendium has one build script.)
+# =============================================================================
+IBUILD="$INSTALLER/build"
+
+# Root: what building ClaudeInstall needs, per distro
+install_claudeinstall_deps() {
+    say "Installing ClaudeInstall's build dependencies"
+    case "$FAMILY" in
+        debian)
+            apt-get update
+            apt-get -y install build-essential cmake ninja-build git pkg-config gettext extra-cmake-modules \
+                libyaml-cpp-dev libkpmcore-dev libparted-dev libicu-dev libatasmart-dev libpwquality-dev os-prober \
+                rsync squashfs-tools qt6-base-dev qt6-base-private-dev qt6-tools-dev qt6-tools-dev-tools qt6-svg-dev \
+                qt6-declarative-dev libkf6coreaddons-dev libkf6crash-dev libkf6i18n-dev libkf6widgetsaddons-dev \
+                libpolkit-qt6-1-dev ;;
+        fedora)
+            dnf -y install gcc-c++ make cmake ninja-build git gettext extra-cmake-modules yaml-cpp-devel \
+                kpmcore-devel parted-devel libicu-devel libatasmart-devel libpwquality-devel rsync squashfs-tools \
+                qt6-qtbase-devel qt6-qtbase-private-devel qt6-qttools-devel qt6-linguist qt6-qtsvg-devel \
+                qt6-qtdeclarative-devel kf6-kcoreaddons-devel kf6-kcrash-devel kf6-ki18n-devel \
+                kf6-kwidgetsaddons-devel kf6-kconfig-devel kf6-kservice-devel polkit-qt6-1-devel ;;
+        opensuse)
+            zypper --non-interactive in gcc-c++ make cmake ninja git gettext-tools yaml-cpp-devel \
+                kpmcore-devel parted-devel libicu-devel libatasmart-devel libpwquality-devel rsync squashfs \
+                qt6-base-devel qt6-base-private-devel qt6-tools-devel qt6-svg-devel qt6-declarative-devel \
+                kf6-extra-cmake-modules kf6-kcoreaddons-devel kf6-kcrash-devel kf6-ki18n-devel \
+                kf6-kwidgetsaddons-devel polkit-qt6-1-devel ;;
+        arch)
+            # distro mode also needs pacstrap (arch-install-scripts), curl and unzip at install time
+            pacman -Sy --noconfirm --needed base-devel cmake ninja git extra-cmake-modules yaml-cpp kpmcore \
+                parted icu libatasmart libpwquality rsync squashfs-tools qt6-base qt6-tools qt6-svg \
+                qt6-declarative kcoreaddons kcrash ki18n kwidgetsaddons polkit-qt6 arch-install-scripts curl unzip ;;
+        gentoo)
+            emerge --noreplace --ask=n dev-build/cmake dev-build/ninja dev-vcs/git kde-frameworks/extra-cmake-modules \
+                dev-cpp/yaml-cpp kde-apps/kpmcore dev-qt/qtbase dev-qt/qttools kde-frameworks/kcoreaddons \
+                kde-frameworks/ki18n kde-frameworks/kwidgetsaddons net-misc/rsync sys-fs/squashfs-tools ;;
+    esac
+}
+
+# User (or root in a container): configure + build. One run lists every compile error (ninja -k 0)
+# in installer/build/errors.log; full output in build.log. $1 = ON to also build the terminal
+# installer (claudeinstall-tui).
+build_claudeinstall() {
+    ITUI="${1:-OFF}"
+    say "Building ClaudeInstall (installer/, Qt6 GUI$([ "$ITUI" = ON ] && echo ' + TUI'))"
+    # A partly copied tree (partition files landed in src/modules/) gives "Cannot find source file"
+    M="$INSTALLER/src/modules"; P="$M/partition"
+    if [ -d "$P" ]; then
+        for f in Config.cpp Config.h PartitionTuiStep.cpp PartitionTuiStep.h PartitionViewStep.cpp \
+                 PartitionViewStep.h partition.conf partition.schema.yaml jobs; do
+            if [ -e "$M/$f" ]; then
+                if [ -e "$P/$f" ]; then rm -rf "${M:?}/$f"; else mv "$M/$f" "$P/$f"; fi
+                say "Repaired tree: src/modules/$f -> src/modules/partition/$f"
+            fi
+        done
+    fi
+    GEN=Ninja
+    command -v ninja >/dev/null 2>&1 || command -v samu >/dev/null 2>&1 || GEN="Unix Makefiles"
+    cmake -S "$INSTALLER" -B "$IBUILD" -G "$GEN" \
+        -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib \
+        -DINSTALL_CONFIG=ON -DWITH_QT6=ON -DWITH_GUI=ON -DWITH_TUI="$ITUI" || return 1
+    if [ "$GEN" = Ninja ]; then
+        RC=0
+        cmake --build "$IBUILD" -j "$(nproc 2>/dev/null || echo 2)" -- -k 0 > "$IBUILD/build.log" 2>&1 || RC=$?
+        grep -E 'error:|FAILED:' "$IBUILD/build.log" > "$IBUILD/errors.log" || true
+        tail -n 5 "$IBUILD/build.log"
+        if [ "$RC" -ne 0 ] || [ -s "$IBUILD/errors.log" ]; then
+            say "ClaudeInstall build failed: errors in $IBUILD/errors.log (full log: $IBUILD/build.log)"
+            return 1
+        fi
+    else
+        cmake --build "$IBUILD" -j "$(nproc 2>/dev/null || echo 2)" || return 1
+    fi
+}
+
+# Root: install the build, its commands and the claudemods presets. $1 = the installer's mode:
+#   clone   (default) install the cloned system from the live ISO - configure_installer then writes it
+#   new     a new-system installer (users, packages): installer/settings.conf
+#   distro  the claudemods distributions online (pacstrap + profile, Arch only): settings-distro.conf
+install_claudeinstall() {
+    IMODE="${1:-clone}"
+    say "Installing ClaudeInstall ($IMODE mode)"
+    cmake --install "$IBUILD" || return 1
+    mkdir -p /etc/claudeinstall/modules
+    # claudeconfig (settings), claudeinstall-colors (sidebar colours), claudeinstall-pkgfix (package names)
+    for c in claudeconfig claudeinstall-colors claudeinstall-pkgfix; do
+        install -Dm755 "$INSTALLER/$c" "/usr/bin/$c"
+    done
+    for pf in "$INSTALLER"/config/*/settings.conf "$INSTALLER"/config/*/modules/*.conf; do
+        [ -f "$pf" ] || continue
+        install -Dm644 "$pf" "/usr/share/claudeinstall/presets/${pf#"$INSTALLER"/config/}"
+    done
+    # Keeps the installer log: copied into the installed system just before the disks are unmounted
+    if [ -f "$INSTALLER/config/claudemods/modules/preservefiles.conf" ]; then
+        install -Dm644 "$INSTALLER/config/claudemods/modules/preservefiles.conf" /etc/claudeinstall/modules/preservefiles.conf
+    fi
+    D=/etc/claudeinstall
+    S=/usr/share/claudeinstall
+    case "$IMODE" in
+        new)
+            cp "$INSTALLER/settings.conf" "$D/settings.conf" ;;
+        distro)
+            # claudemods distributions: pacstrap + profile (modules/distroprofile), picked on the "Distribution" page
+            cp "$INSTALLER/settings-distro.conf" "$D/settings.conf"
+            install -Dm644 "$INSTALLER/packagechooser-distro.conf" "$D/modules/packagechooser-distro.conf"
+            install -Dm644 "$INSTALLER/packagechooser-regdom.conf" "$D/modules/packagechooser-regdom.conf"
+            for f in distroprofile distroprofile-customize distroprofile-finalize; do
+                install -Dm644 "$INSTALLER/src/modules/distroprofile/$f.conf" "$D/modules/$f.conf"
+            done
+            for p in "$INSTALLER"/profiles/*.conf; do install -Dm644 "$p" "$S/profiles/$(basename "$p")"; done
+            for i in "$INSTALLER"/images/*.png; do install -Dm644 "$i" "$S/images/$(basename "$i")"; done
+            # the small local files the profiles copy (pacman.conf, tweak scripts ...)
+            if [ -d "$INSTALLER/needed-files" ]; then
+                mkdir -p "$S/needed-files"
+                cp -a "$INSTALLER/needed-files/." "$S/needed-files/"
+            else
+                say "installer/needed-files not found: the profiles' copy steps will fail"
+            fi ;;
+    esac
+    # new / distro: keep the installer log in the installed system (clone mode lists it itself)
+    if [ "$IMODE" != clone ] && ! grep -Eq '^[[:space:]]*-[[:space:]]*preservefiles' "$D/settings.conf"; then
+        sed -i -E 's/^([[:space:]]*-[[:space:]]*)umount[[:space:]]*$/\1preservefiles\n\1umount/' "$D/settings.conf"
+    fi
+}
+
+# =============================================================================
+# CCCU (cccu/): dependencies, compiler, build, install.
+# (Was cccu/build.sh; merged here so the compendium has one build script.)
+# =============================================================================
+CBUILD="$CCCU_SRC/build"
+
+# Root: CCCU's build and runtime tools ($1 = 1 with the Qt6 window cccu-gui). Incus itself is
+# installed later by CCCU when it sets up a host.
+install_cccu_deps() {
+    say "Installing CCCU's build dependencies"
+    case "$FAMILY" in
+        arch)
+            pacman -S --needed --noconfirm base-devel cmake curl rsync tar zstd squashfs-tools parted dosfstools e2fsprogs btrfs-progs
+            [ "$1" = 1 ] && pacman -S --needed --noconfirm qt6-base polkit ;;
+        debian)
+            apt-get update
+            apt-get install -y build-essential cmake curl rsync tar zstd squashfs-tools parted dosfstools e2fsprogs btrfs-progs
+            [ "$1" = 1 ] && apt-get install -y qt6-base-dev
+            # CCCU is C++23: older releases need g++-14 next to the default compiler
+            cccu_compiler >/dev/null || apt-get install -y g++-14 || true ;;
+        fedora)
+            dnf install -y gcc-c++ make cmake curl rsync tar zstd squashfs-tools parted dosfstools e2fsprogs btrfs-progs glibc-static
+            [ "$1" = 1 ] && dnf install -y qt6-qtbase-devel polkit ;;
+        opensuse)
+            zypper --non-interactive install gcc-c++ make cmake curl rsync tar zstd squashfs parted dosfstools e2fsprogs btrfsprogs glibc-devel-static
+            [ "$1" = 1 ] && zypper --non-interactive install qt6-base-devel polkit ;;
+    esac
+    return 0
+}
+
+# Prints a C++23 compiler (GCC 14+ or Clang 17+); fails when there is none
+cccu_compiler() {
+    for cxx in "${CXX:-}" g++-15 g++-14 g++ clang++-19 clang++-18 clang++-17 clang++; do
+        [ -n "$cxx" ] && command -v "$cxx" >/dev/null 2>&1 || continue
+        MACROS=$(echo | "$cxx" -dM -E -x c++ - 2>/dev/null) || continue
+        if printf '%s\n' "$MACROS" | grep -q '__clang__'; then
+            MAJOR=$(printf '%s\n' "$MACROS" | sed -n 's/^#define __clang_major__ //p'); NEED=17
+        else
+            MAJOR=$(printf '%s\n' "$MACROS" | sed -n 's/^#define __GNUC__ //p'); NEED=14
+        fi
+        if [ "${MAJOR:-0}" -ge "$NEED" ]; then echo "$cxx"; return 0; fi
+    done
+    return 1
+}
+
+# User: build cccu (+ cccu-gui with $1 = 1). The ISO boot files of the non-Arch families are fetched
+# once into cccu/resources and carried inside cccu.
+build_cccu() {
+    CXX_FOUND=$(cccu_compiler) || { say "CCCU needs GCC 14+ or Clang 17+ (C++23); this system's compiler is too old"; return 1; }
+    say "Compiler for CCCU: $CXX_FOUND"
+    mkdir -p "$CCCU_SRC/resources"
+    BL="$CCCU_SRC/resources/bootloaders.tar.gz"
+    if [ ! -s "$BL" ]; then
+        if curl -fL --progress-bar --connect-timeout 20 --retry 3 "$BOOTLOADER_URL" -o "$BL.part"; then
+            mv "$BL.part" "$BL"
+        else
+            rm -f "$BL.part"
+            say "Could not download the ISO boot files; 'cccu iso' then downloads them inside the container"
+        fi
+    fi
+    CGUI=OFF
+    [ "$1" = 1 ] && CGUI=ON
+    cmake -S "$CCCU_SRC" -B "$CBUILD" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER="$CXX_FOUND" -DCCCU_BUILD_GUI="$CGUI" &&
+        cmake --build "$CBUILD" -j "$(nproc 2>/dev/null || echo 2)"
+}
+
+# Root: install cccu (/usr/local/bin) and, with the GUI, its menu entry and icon
+install_cccu() {
+    cmake --install "$CBUILD" || return 1
+    if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database >/dev/null 2>&1 || true; fi
+    if command -v gtk-update-icon-cache >/dev/null 2>&1; then gtk-update-icon-cache -q /usr/local/share/icons/hicolor 2>/dev/null || true; fi
+}
+
 # ---- Desktop shortcut ------------------------------------------------------
 # "Install <distro>" on the Desktop: part of the clone, so the live ISO's desktop has it.
 add_desktop_shortcut() {
@@ -744,7 +950,8 @@ container_installer() {
     detect_family
     [ "$FAMILY" != alpine ] || die "Alpine uses the cloner's own installer, not ClaudeInstall"
     say "Building ClaudeInstall inside the container (installer/, clone mode)"
-    sh "$INSTALLER/build.sh" install --clone --gui --no-deps || die "ClaudeInstall did not build (see $INSTALLER/build/errors.log)"
+    build_claudeinstall || die "ClaudeInstall did not build (see $IBUILD/errors.log)"
+    install_claudeinstall || die "ClaudeInstall could not be installed"
     configure_installer "$1" "$2"
     DESK_USER=""
     DESK_HOME=/root
@@ -755,6 +962,8 @@ case "${1:-}" in
     --root-phase)          shift; root_phase "$@"; exit 0 ;;
     --configure-installer) shift; configure_installer "$@"; exit 0 ;;
     --container-installer) shift; container_installer "$@"; exit 0 ;;
+    --install-claudeinstall) shift; install_claudeinstall "${1:-clone}"; exit $? ;;
+    --install-cccu)        install_cccu; exit $? ;;
     help|-h|--help)        sed -n '2,/^set -e/p' "$SELF" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 
@@ -762,6 +971,7 @@ esac
 # User phase: questions, root phase, build, install, launch
 # =============================================================================
 ASSUME_YES=0; WANT_INSTALLER=""; WANT_GUI=1; WANT_BTRFS=""; WANT_EROFS=0; LAUNCH=1; WANT_CCCU=1
+IMODE=clone; ITUI=OFF
 for a in "$@"; do
     case "$a" in
         --yes|-y)       ASSUME_YES=1 ;;
@@ -773,16 +983,23 @@ for a in "$@"; do
         --erofs)        WANT_EROFS=1 ;;
         --no-launch)    LAUNCH=0 ;;
         --no-cccu)      WANT_CCCU=0 ;;
+        --installer-mode=clone|--installer-mode=new|--installer-mode=distro)
+                        IMODE="${a#--installer-mode=}"; WANT_INSTALLER=1 ;;
+        --installer-mode=*) die "--installer-mode is clone, new or distro" ;;
+        --installer-tui) ITUI=ON ;;
         *) die "unknown option: $a (see ./build.sh help)" ;;
     esac
 done
 
-for d in "$CLONER/Makefile" "$GUI_SRC/CMakeLists.txt" "$INSTALLER/build.sh"; do
+for d in "$CLONER/Makefile" "$GUI_SRC/CMakeLists.txt" "$INSTALLER/CMakeLists.txt" "$CCCU_SRC/CMakeLists.txt"; do
     [ -f "$d" ] || die "$d not found - keep build.sh in the claude-codex-compendium folder"
 done
 [ "$(uname -s)" = "Linux" ] || die "this project only builds on Linux"
 detect_family
 say "Detected $DISTRO_NAME"
+if [ "$IMODE" = distro ] && [ "$FAMILY" != arch ]; then
+    die "--installer-mode=distro installs with pacstrap and must be built and run on an Arch-family system"
+fi
 
 # yes/no question; $2 is the default (y/n); --yes or no terminal = the default
 ask() {
@@ -841,7 +1058,7 @@ if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-${DOAS_USER:-}}" ]; then
 fi
 
 say "Installing packages as root"
-as_root sh "$SELF" --root-phase "$FAMILY" "$INSTALLER_ON" "$ALPINE_TOOLS" "$WANT_GUI"
+as_root sh "$SELF" --root-phase "$FAMILY" "$INSTALLER_ON" "$ALPINE_TOOLS" "$WANT_GUI" "$WANT_CCCU"
 
 finalize_image_format
 
@@ -870,45 +1087,36 @@ if [ "$WANT_GUI" = 1 ]; then
 fi
 
 # ---- 3. ClaudeInstall -------------------------------------------------------
+# Built as you, installed as root, then configured to install the clone
 if [ "$INSTALLER_ON" = 1 ]; then
-    say "Building ClaudeInstall (installer/, clone mode, Qt6 GUI)"
-    if sh "$INSTALLER/build.sh" build --clone --gui --no-deps; then
-        say "Installing ClaudeInstall"
-        if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
-            sh "$INSTALLER/build.sh" install --clone --gui --no-deps          # it uses sudo itself
+    if build_claudeinstall "$ITUI" && as_root sh "$SELF" --install-claudeinstall "$IMODE"; then
+        if [ "$IMODE" = clone ]; then
+            say "Configuring ClaudeInstall to install the clone"
+            as_root sh "$SELF" --configure-installer "$BTRFS" "$EROFS"
         else
-            as_root sh "$INSTALLER/build.sh" install --clone --gui --no-deps
-            if [ "$(id -u)" -ne 0 ]; then as_root chown -R "$(id -u):$(id -g)" "$INSTALLER/build" 2>/dev/null || true; fi
+            say "ClaudeInstall installed in $IMODE mode: run  sudo claudeinstall$([ "$ITUI" = ON ] && echo '  (or sudo claudeinstall-tui)')"
         fi
-        say "Configuring ClaudeInstall to install the clone"
-        as_root sh "$SELF" --configure-installer "$BTRFS" "$EROFS"
     else
         INSTALLER_ON=0
-        say "ClaudeInstall did not build (errors: $INSTALLER/build/errors.log). The cloner and the app are installed;"
+        say "ClaudeInstall did not build or install (errors: $IBUILD/errors.log). The cloner and the app are installed;"
         say "fix the errors and run ./build.sh again - the live ISO has no installer until then."
     fi
 fi
 
 # ---- 4. CCCU ----------------------------------------------------------------
-# cccu/build.sh installs its own dependencies (GCC 14+, CMake 3.25+, Qt6) and installs cccu + cccu-gui.
 # Its ISO engine is the cloner's (cloner/src) and its ISOs carry ClaudeInstall (built in the container).
 CCCU_OK=0
 if [ "$WANT_CCCU" = 1 ]; then
     say "Building CCCU (cccu/, the container creator)"
-    command -v bash >/dev/null 2>&1 || die "CCCU's build script needs bash"
-    CCCU_ARGS=""
-    [ "$WANT_GUI" = 1 ] || CCCU_ARGS="--no-gui"
-    # shellcheck disable=SC2086
-    if [ "$(id -u)" -eq 0 ] || command -v sudo >/dev/null 2>&1; then
-        bash "$CCCU_SRC/build.sh" $CCCU_ARGS && CCCU_OK=1          # it uses sudo itself
+    if build_cccu "$WANT_GUI" && as_root sh "$SELF" --install-cccu; then
+        CCCU_OK=1
     else
-        as_root bash "$CCCU_SRC/build.sh" $CCCU_ARGS && CCCU_OK=1
-        as_root chown -R "$(id -u):$(id -g)" "$CCCU_SRC/build" "$CCCU_SRC/resources" 2>/dev/null || true
+        say "CCCU did not build (it needs GCC 14+ and CMake 3.25+, see above). Everything else is installed."
     fi
-    [ "$CCCU_OK" = 1 ] || say "CCCU did not build (it needs GCC 14+ and CMake 3.25+, see above). Everything else is installed."
 fi
 
-if [ "$INSTALLER_ON" = 1 ] || [ "$ALPINE_TOOLS" = 1 ]; then add_desktop_shortcut; fi
+# (the shortcut opens the clone installer: not for ClaudeInstall's new / distro modes)
+if { [ "$INSTALLER_ON" = 1 ] && [ "$IMODE" = clone ]; } || [ "$ALPINE_TOOLS" = 1 ]; then add_desktop_shortcut; fi
 
 say "Done."
 say "  Terminal menu:  $TARGET"

@@ -430,13 +430,13 @@ MainWindow::fillOverview()
     add( missing.isEmpty() ? Ok : Fail,
          tr( "Build tools" ),
          missing.isEmpty() ? tr( "mksquashfs, xorriso, mtools and dosfstools are installed." )
-                           : tr( "Missing: %1 - run build.sh in the suite folder." ).arg( missing ) );
+                           : tr( "Missing: %1 - run build.sh in the compendium folder." ).arg( missing ) );
 
     add( s.flag( QStringLiteral( "bootFiles" ) ) ? Ok : Fail,
          tr( "Boot files" ),
          isArch() ? tr( "Embedded claudemods ISO tree (GRUB BIOS/UEFI, theme)." )
                   : s.flag( QStringLiteral( "bootFiles" ) ) ? tr( "BIOS/UEFI bootloaders are installed." )
-                                                            : tr( "The bootloaders are not installed - run build.sh in the suite folder." ) );
+                                                            : tr( "The bootloaders are not installed - run build.sh in the compendium folder." ) );
 
     if ( isArch() )
     {
@@ -466,7 +466,7 @@ MainWindow::fillOverview()
         add( installerReady ? Ok : Warn,
              tr( "ClaudeInstall" ),
              installerReady ? tr( "Installed and configured to put this clone on a disk from the live ISO." )
-                            : tr( "Not set up: the live ISO would have no installer. Run build.sh in the suite folder and answer yes to ClaudeInstall." ) );
+                            : tr( "Not set up: the live ISO would have no installer. Run build.sh in the compendium folder and answer yes to ClaudeInstall." ) );
     }
 
     const bool erofs = s.value( QStringLiteral( "imageFormat" ) ) == QLatin1String( "erofs" );
@@ -690,7 +690,7 @@ MainWindow::startBuild()
     }
     if ( !m_status.value( QStringLiteral( "missingTools" ) ).isEmpty() )
     {
-        QMessageBox::warning( this, tr( "Build ISO" ), tr( "Missing tools: %1\n\nRun build.sh in the suite folder first." ).arg( m_status.value( QStringLiteral( "missingTools" ) ) ) );
+        QMessageBox::warning( this, tr( "Build ISO" ), tr( "Missing tools: %1\n\nRun build.sh in the compendium folder first." ).arg( m_status.value( QStringLiteral( "missingTools" ) ) ) );
         return;
     }
     if ( m_status.value( QStringLiteral( "installer" ) ) == QLatin1String( "claudeinstall" ) && !m_status.flag( QStringLiteral( "installerReady" ) )
@@ -1172,7 +1172,7 @@ MainWindow::loadConfigItem( QListWidgetItem* item )
     else
     {
         m_editor->setPlainText( custom ? tr( "No copy yet.\n\n\"Create My Copy\" makes one from what the build generates for %1." ).arg( m_status.value( QStringLiteral( "distro" ) ) )
-                                       : tr( "Not installed. Run build.sh in the suite folder and answer yes to ClaudeInstall." ) );
+                                       : tr( "Not installed. Run build.sh in the compendium folder and answer yes to ClaudeInstall." ) );
     }
     m_editorDirty = false;
     m_configCreate->setVisible( custom && !exists );
@@ -1503,7 +1503,7 @@ MainWindow::fillInstall()
     const bool available = m_status.value( QStringLiteral( "installer" ) ) == QLatin1String( "claudeinstall" );
     m_installerState->setText( !available ? tr( "<span style='color:#ff5c6c'>This distro is not supported.</span>" )
                                : ready    ? tr( "<span style='color:#5fbf7a'>✓ ClaudeInstall is installed and configured for this clone.</span>" )
-                                          : tr( "<span style='color:#e5c07b'>! ClaudeInstall is not set up. Run build.sh in the suite folder and answer yes to ClaudeInstall, "
+                                          : tr( "<span style='color:#e5c07b'>! ClaudeInstall is not set up. Run build.sh in the compendium folder and answer yes to ClaudeInstall, "
                                                 "then build the ISO again.</span>" ) );
     m_launchInstaller->setEnabled( available && ready );
 }

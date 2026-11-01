@@ -109,7 +109,7 @@ skips.
 | **openSUSE** | ✅ | ✅ | ✅ | ✅ |
 | **Gentoo** | ✅ (squashfs only) | ✅ | ✅ | ❌ |
 | **Alpine** | ✅ (squashfs only) | ✅ | ❌, the cloner's own installer is used | ❌ |
-| **Void** | ❌ | ❌ | builds (its own `installer/build.sh`), but the cloner has no Void support | ❌ |
+| **Void** | ❌ | ❌ | ClaudeInstall knows Void, but the compendium's build.sh and the cloner do not support it | ❌ |
 
 Which distributions each family includes:
 
@@ -151,9 +151,9 @@ Qt6 app, and whether to build CCCU. Then it:
 1. installs the build and ISO tools for your distro (squashfs-tools, xorriso, mtools, ...)
 2. builds and installs `claudebackup-linux` (the cloner) and its polkit rule
 3. builds and installs `claudebackup-linux-qt6` (the app)
-4. builds and installs ClaudeInstall (`installer/build.sh --clone --gui`), then sets up
-   `/etc/claudeinstall` to install the clone from the live ISO
-5. builds and installs CCCU (`cccu/build.sh`: `cccu` and `cccu-gui`). This only happens on Arch,
+4. builds and installs ClaudeInstall (clone mode, Qt6 GUI), then sets up `/etc/claudeinstall`
+   to install the clone from the live ISO
+5. builds and installs CCCU (`cccu` and `cccu-gui`). This only happens on Arch,
    Debian, Fedora and openSUSE, and needs GCC 14+. If it fails, everything else is still
    installed.
 6. puts an **Install &lt;distro&gt;** shortcut on the Desktop. The shortcut is part of the clone,
@@ -161,7 +161,34 @@ Qt6 app, and whether to build CCCU. Then it:
 7. starts the app
 
 Options: `--yes` (use the defaults, ask nothing), `--erofs`, `--btrfs` / `--ext4`,
-`--no-installer`, `--no-gui`, `--no-cccu`, `--no-launch`. Run `./build.sh help` to list them.
+`--no-installer`, `--no-gui`, `--no-cccu`, `--no-launch`, `--installer-mode=clone|new|distro`,
+`--installer-tui`. Run `./build.sh help` to list them.
+
+### One build script
+
+There is **one** build script: `./build.sh` at the top. It builds all four tools, with no
+separate build script per project. The four old build scripts are merged into it:
+
+| Old script | Now in `build.sh` |
+|---|---|
+| claudebackup-linux `dev-release/build.sh` | host tools, bootloaders, the cloner, the Alpine installer tools |
+| claudeinstall-linux `build.sh` | `install_claudeinstall_deps`, `build_claudeinstall`, `install_claudeinstall` |
+| CCCU `build.sh` | `install_cccu_deps`, `cccu_compiler`, `build_cccu`, `install_cccu` |
+| CCCU `src/remaster/provision.sh` | `--root-phase` and `--container-installer`, which CCCU runs inside containers |
+
+CCCU carries this same `build.sh` into its containers (in its provisioning bundle), so the host
+and the containers run identical steps.
+
+The only other scripts in the folder are not build scripts:
+
+| Script | What it is |
+|---|---|
+| `installer/claudeconfig`, `claudeinstall-colors`, `claudeinstall-pkgfix` | commands that ClaudeInstall installs on the system (to change its settings and colours) |
+| `installer/needed-files/**/*.sh` | tweak scripts that ClaudeInstall's claudemods-distro mode copies onto installed systems |
+
+Removed while merging: those four build scripts, ClaudeInstall's setup helper app
+(`installer/helper/`, which only wrote settings for its old build script), and ClaudeInstall's
+`ci/` folder (Calamares build-test scripts that nothing used).
 
 ## CCCU (containers)
 
@@ -246,7 +273,7 @@ kept in `/etc/claudeinstall.orig`.
 ## Requirements
 
 Linux; Qt 6.2 or newer for the app; ClaudeInstall's own dependencies, which
-`installer/build.sh deps` installs. Test the ISO and the installer in a virtual machine (UEFI)
+the compendium's `build.sh` installs. Test the ISO and the installer in a virtual machine (UEFI)
 first: installing erases the target disk.
 
 Logs: `/var/log/claudebackup-linux.log` (cloner), `/tmp/claudebackup-install-<uid>.log`

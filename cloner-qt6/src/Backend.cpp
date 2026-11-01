@@ -94,7 +94,7 @@ Backend::status() const
     ClonerStatus s;
     if ( !QFileInfo( clonerPath() ).isExecutable() )
     {
-        s.error = tr( "The cloner (%1) is not installed. Run the suite's build.sh first." ).arg( clonerPath() );
+        s.error = tr( "The cloner (%1) is not installed. Run the compendium's build.sh first." ).arg( clonerPath() );
         return s;
     }
     int rc = 0;
