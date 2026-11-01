@@ -1,12 +1,12 @@
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=Install System
+Name=Claude Codex Install
 GenericName=System Installer
-Keywords=claudeinstall;system;installer;
+Keywords=claude;codex;claudeinstall;system;installer;
 TryExec=claudeinstall
 Exec=sh -c "pkexec claudeinstall"
-Comment=ClaudeInstall â€” System Installer
+Comment=Claude Codex Install - System Installer (Claude Codex Compendium v1.0 01-11-2026)
 Icon=claudeinstall
 Terminal=false
 StartupNotify=true

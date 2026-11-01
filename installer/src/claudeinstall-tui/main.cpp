@@ -180,7 +180,7 @@ main( int argc, char* argv[] )
     }
 
     Logger::setupLogfile();
-    cDebug() << "ClaudeInstall (text mode) version:" << CLAUDEINSTALL_VERSION;
+    cDebug() << "Claude Codex Install (text mode, Compendium v1.0 01-11-2026), ClaudeInstall version:" << CLAUDEINSTALL_VERSION;
     cDebug() << Logger::SubEntry << "Using settings:" << ClaudeInstall::Settings::instance()->path();
     cDebug() << Logger::SubEntry << "Using log file:" << Logger::logFile();
 

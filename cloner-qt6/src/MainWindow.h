@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: claudemods
 // SPDX-License-Identifier: MIT
 //
-// claudebackup linux (Qt6): the main window. A sidebar of pages:
+// Claude Codex Backup (Qt6): the main window. A sidebar of pages:
 //   Overview      what is ready on this system, with fixes, and quick actions
 //   Build ISO     the build steps, progress and live log
 //   Settings      ISO name, directories, image type, compression, boot options
-//   Edit Configs  GRUB / boot text / initramfs copies and the ClaudeInstall configuration
+//   Edit Configs  GRUB / boot text / initramfs copies and the Claude Codex Install configuration
 //   Write USB     put an ISO on a drive
-//   Install       in the live ISO: ClaudeInstall (or the Alpine installer) puts the clone on a disk
+//   Install       in the live ISO: Claude Codex Install (or the Alpine installer) puts the clone on a disk
 //   Guide         the cloner's guide for this distro
 //   Maintenance   updates, mkinitcpio config, log
 

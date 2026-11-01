@@ -13,13 +13,18 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 
-// Product identity
-const std::string APP_NAME    = "claudebackup linux";
-// Set by the Makefile from cloner/version.txt
+// Product identity: Claude Codex Backup, part of the Claude Codex Compendium
+const std::string APP_NAME    = "Claude Codex Backup";
+// Set by the Makefile from cloner/version.txt; compared with GitHub's for updates (keep it "v<number>")
 #ifndef CBL_VERSION
 #define CBL_VERSION "v1.0"
 #endif
 const std::string APP_VERSION = std::string(CBL_VERSION).empty() ? "v1.0" : CBL_VERSION;
+// The release every Claude Codex tool shows
+#ifndef CODEX_RELEASE
+#define CODEX_RELEASE "Compendium v1.0 01-11-2026"
+#endif
+const std::string APP_RELEASE = CODEX_RELEASE;
 const std::string APP_BIN     = "claudebackup-linux";
 
 // Filesystem label of the live medium (referenced by boot params, menus and xorriso)
@@ -43,7 +48,7 @@ const std::string TOOLS_HINT = CBL_TOOLS_HINT;
 
 // The installer the live ISO uses to put the clone on a disk: ClaudeInstall (installer/ in the
 // compendium), set up for the clone by the compendium's build.sh. Alpine keeps its own installer (below).
-const std::string INSTALLER_NAME      = "ClaudeInstall";
+const std::string INSTALLER_NAME      = "Claude Codex Install";
 const std::string INSTALLER_BIN       = "claudeinstall";
 const std::string INSTALLER_LAUNCHER  = "/usr/local/bin/claudebackup-install";   // root + display + image type
 const std::string INSTALLER_CONF_DIR  = "/etc/claudeinstall";

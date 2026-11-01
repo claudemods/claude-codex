@@ -1,4 +1,4 @@
-// claudebackup linux v1.0
+// Claude Codex Backup (claudebackup-linux) - Claude Codex Compendium v1.0 01-11-2026
 // Menu-driven multi-distro live ISO backup in C++. Per-family modules follow
 // penguins-eggs (brain.d templates + oa engine), merged into one native binary.
 

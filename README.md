@@ -50,13 +50,20 @@
 Clone your running Linux system into a bootable live ISO or into an Incus container, and install
 the clone back onto a disk from the live ISO, with one build script.
 
-| Folder | What it is | Came from |
-|---|---|---|
-| `cloner/` | **claudebackup-linux**: the C++ cloner (terminal menu + batch commands). It is also the ISO engine that CCCU uses | `claudebackup-linux-main/dev-release` |
-| `cloner-qt6/` | **claudebackup-linux-qt6**: the Qt6 desktop app for the cloner | new |
-| `installer/` | **ClaudeInstall**: the Qt6 installer, used in place of Calamares | `claudeinstall-linux-main` |
-| `cccu/` | **CCCU**: clones the system into an Incus container, and builds a live ISO of a container | `CCCU-main` |
-| `build.sh` | builds, installs and configures everything above | replaces the separate build scripts |
+## The tools
+
+Every tool shows **Compendium v1.0 01-11-2026** in its window, banner, About box or `--help`.
+
+| Tool | What it does | Commands | Folder | Came from |
+|---|---|---|---|---|
+| **Claude Codex Backup** | clones the running system into a bootable live ISO; terminal menu and Qt6 app. Its engine is also what Claude Codex CCU uses | `claude-codex-backup` (`claudebackup-linux`), `claude-codex-backup-gui` (`claudebackup-linux-qt6`) | `cloner/`, `cloner-qt6/` | claudebackup-linux (+ the new Qt6 app) |
+| **Claude Codex Install** | the installer (ClaudeInstall): installs the clone from the live ISO, a new system, or claudemods distros online | `claude-codex-install` (`claudeinstall`), `claude-codex-install-tui` (`claudeinstall-tui`) | `installer/` | claudeinstall-linux |
+| **Claude Codex CCU** | Container Creator Utility: clones the system into an Incus container and builds live ISOs of containers | `claude-codex-ccu` (`cccu`), `claude-codex-ccu-gui` (`cccu-gui`) | `cccu/` | CCCU |
+| `build.sh` | builds, installs and configures all of the above | | | replaces the separate build scripts |
+
+The `claude-codex-*` commands are links that `build.sh` installs in `/usr/local/bin`, next to the
+original command names, which still work. The tools' internal names (config folders such as
+`/etc/claudeinstall`, library and package names) are unchanged, so existing setups keep working.
 
 ## How four projects became one
 

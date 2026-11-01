@@ -25,7 +25,9 @@
 
 </div>
 
-# CCCU - Claudemods Container Creator Utility
+# Claude Codex CCU - Container Creator Utility
+
+**Claude Codex Compendium v1.0 01-11-2026** (formerly CCCU, the Claudemods Container Creator Utility; the commands are still `cccu` / `cccu-gui`, also `claude-codex-ccu` / `claude-codex-ccu-gui`)
 
 > Part of the **Claude Codex Compendium v1.0** (`cccu/`). Build it with the compendium's `../build.sh` (or `bash build.sh` here); it needs the compendium next to it (`../cloner`, `../installer`).
 >
@@ -488,7 +490,7 @@ One record per line - `date time LEVEL text`:
 
 ```
 ============================================================================
- CCCU v1.0 30-10-2026  -  Claudemods Container Creator Utility
+ Claude Codex CCU  -  Container Creator Utility  -  Compendium v1.0 01-11-2026
  started : 2026-10-29 14:03:11.482
  host    : live
  command : cccu install --drive /dev/sda --image desktop.tar.zst --yes

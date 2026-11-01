@@ -65,7 +65,7 @@ void
 ClaudeInstallApplication::init()
 {
     Logger::setupLogfile();
-    cDebug() << "ClaudeInstall version:" << CLAUDEINSTALL_VERSION;
+    cDebug() << "Claude Codex Install (Compendium v1.0 01-11-2026), ClaudeInstall version:" << CLAUDEINSTALL_VERSION;
     cDebug() << Logger::SubEntry << "Using Qt version:" << qVersion();
     cDebug() << Logger::SubEntry << "Build type:" << CMAKE_BUILD_TYPE;
     cDebug() << Logger::SubEntry << "Using settings:" << ClaudeInstall::Settings::instance()->path();

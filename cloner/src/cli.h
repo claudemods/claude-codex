@@ -30,7 +30,7 @@ inline const std::vector<Command>& commands() {
         {"--mkinitcpio-config", true,  "Arch: put 11-dm-initramfs.rules in place"},
         {"--seed-custom",       true,  "NAME  create your editable copy of a boot/initramfs file"},
         {"--write-system-file", true,  "PATH  replace an installer config file with stdin (keeps PATH.bak)"},
-        {"--launch-installer",  true,  "start " "ClaudeInstall" " for the clone"},
+        {"--launch-installer",  true,  "start Claude Codex Install for the clone"},
         {"--update",            true,  "download, build and install the latest cloner"},
         {"--help-batch",        false, "this list"},
     };
@@ -90,6 +90,7 @@ inline int printStatus() {
 
     kv("app", APP_NAME);
     kv("version", APP_VERSION);
+    kv("release", APP_RELEASE);
     kv("user", USERNAME);
     kv("distro", d.prettyName);
     kv("distroId", d.distroID);
@@ -216,7 +217,7 @@ inline int run(const Command& cmd, int argc, char* argv[]) {
     auto result = [](bool ok) { remaster::marker(std::string("result ") + (ok ? "ok" : "fail")); return ok ? 0 : 1; };
 
     if (name == "--help-batch") {
-        std::cout << APP_BIN << " " << APP_VERSION << " - batch commands (no menu):\n";
+        std::cout << APP_NAME << " (" << APP_BIN << ") " << APP_RELEASE << " - batch commands (no menu):\n";
         for (const auto& c : commands()) std::cout << "  " << c.name << "  " << c.usage << (c.root ? "  [root]" : "") << "\n";
         std::cout << "  --cancel-on-eof   with a root command: cancel when stdin closes\n";
         return 0;

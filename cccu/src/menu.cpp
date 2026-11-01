@@ -275,8 +275,8 @@ std::vector<Row> rows_for(Mode mode, Options& o, Flags& flags, std::string& noti
         rows.push_back({"Leave package caches out", o.iso_clean_cache ? "yes" : "no", true, [&o] {
             o.iso_clean_cache = confirm("Leave package caches out of the image?", o.iso_clean_cache);
         }});
-        rows.push_back({"Installer on the ISO", o.iso_installer ? (o.iso_btrfs ? "ClaudeInstall, btrfs zstd:22" : "ClaudeInstall, ext4") : "none", true, [&o] {
-            o.iso_installer = confirm("Put the ClaudeInstall installer on the ISO (built in the container)?", o.iso_installer);
+        rows.push_back({"Installer on the ISO", o.iso_installer ? (o.iso_btrfs ? "Claude Codex Install, btrfs zstd:22" : "Claude Codex Install, ext4") : "none", true, [&o] {
+            o.iso_installer = confirm("Put Claude Codex Install on the ISO (built in the container)?", o.iso_installer);
             if (o.iso_installer) o.iso_btrfs = confirm("Should it default to btrfs with zstd:22 (no = ext4)?", o.iso_btrfs);
         }});
         return rows;

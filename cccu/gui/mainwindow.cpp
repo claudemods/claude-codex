@@ -167,7 +167,7 @@ QLabel* makeLabel(const QString& text, const char* objectName) {
 }  // namespace
 
 MainWindow::MainWindow() {
-    setWindowTitle("CCCU - Claudemods Container Creator Utility");
+    setWindowTitle("Claude Codex CCU - Container Creator Utility");
     resize(1200, 780);
     setMinimumSize(1120, 740);
     setStyleSheet(kStyle);
@@ -182,13 +182,13 @@ MainWindow::MainWindow() {
     // ---- header ----
     auto* header = new QHBoxLayout;
     header->setSpacing(14);
-    header->addWidget(makeLabel("CCCU", "brand"));
-    header->addWidget(makeLabel("Claudemods Container Creator Utility", "subtitle"));
+    header->addWidget(makeLabel("Claude Codex CCU", "brand"));
+    header->addWidget(makeLabel("Container Creator Utility", "subtitle"));
     header->addStretch();
-    rootWarning_ = makeLabel("Administrator rights missing - close and open CCCU again (is polkit / pkexec installed?)", "warning");
+    rootWarning_ = makeLabel("Administrator rights missing - close and open Claude Codex CCU again (is polkit / pkexec installed?)", "warning");
     rootWarning_->setVisible(::geteuid() != 0);
     header->addWidget(rootWarning_);
-    header->addWidget(makeLabel(QString("v%1  %2").arg(QString::fromLatin1(CCCU_GUI_VERSION), QString::fromLatin1(CCCU_DATE)), "version"));
+    header->addWidget(makeLabel(QString("Compendium v%1  %2").arg(QString::fromLatin1(CCCU_GUI_VERSION), QString::fromLatin1(CCCU_DATE)), "version"));
     col->addLayout(header);
 
     // ---- tabs: one settings page each ----
@@ -519,8 +519,8 @@ QWidget* MainWindow::buildIsoPage() {
     addRow(Iso, "zstd level (1-22)", isoLevel_, {isoLevel_}, true, [] { return true; });
 
     isoInstaller_ = new QComboBox;
-    isoInstaller_->addItem("ClaudeInstall, ext4", "ext4");
-    isoInstaller_->addItem("ClaudeInstall, btrfs zstd:22", "btrfs");
+    isoInstaller_->addItem("Claude Codex Install, ext4", "ext4");
+    isoInstaller_->addItem("Claude Codex Install, btrfs zstd:22", "btrfs");
     isoInstaller_->addItem("No installer", "none");
     addRow(Iso, "Installer on the ISO", isoInstaller_, {isoInstaller_}, true, [] { return true; });
 

@@ -1,32 +1,34 @@
 #!/bin/sh
-# build.sh - Claude Codex Compendium v1.0 (01-11-2026): the cloner, its Qt6 app, the
-# ClaudeInstall installer and CCCU (the container creator), in one go.
+# build.sh - Claude Codex Compendium v1.0 01-11-2026, in one go:
+#   Claude Codex Backup  (the cloner claudebackup-linux + its Qt6 app claudebackup-linux-qt6)
+#   Claude Codex Install (the installer, ClaudeInstall: claudeinstall / claudeinstall-tui)
+#   Claude Codex CCU     (the Container Creator Utility: cccu / cccu-gui)
 #   1. detects the distro
 #   2. installs the build tools and the host tools the ISO build uses (per distro)
 #   3. builds and installs the cloner (cloner/, terminal menu + batch commands)
 #   4. builds and installs the Qt6 app (cloner-qt6/)
-#   5. builds and installs ClaudeInstall (installer/) and configures it to install the CLONE from
+#   5. builds and installs Claude Codex Install (installer/) and configures it to install the CLONE from
 #      the live ISO (unpacks its squashfs/erofs image; no users page - the clone keeps its users).
-#      Alpine has no ClaudeInstall here: the live ISO gets the cloner's own "Install Cloned System
+#      Alpine has no Claude Codex Install here: the live ISO gets the cloner's own "Install Cloned System
 #      To Disk" instead (its tools are installed in step 2).
 #   6. builds and installs CCCU (cccu/: clone this system into an Incus container; its "Create ISO"
-#      uses the same cloner engine and ClaudeInstall) - Arch, Debian, Fedora, openSUSE; needs GCC 14+
+#      uses the same cloner engine and Claude Codex Install) - Arch, Debian, Fedora, openSUSE; needs GCC 14+
 #   7. puts an "Install <distro>" shortcut on the Desktop (it is part of the clone, so the live
 #      ISO's desktop has it) and starts the app
 # Plain POSIX sh, so it also runs on a stock Alpine (sh build.sh) without bash.
 #
 #   ./build.sh                 everything, asking a few questions
 #   ./build.sh --yes           everything with the defaults, no questions
-#   ./build.sh --no-installer  skip ClaudeInstall          ./build.sh --no-gui   skip the Qt6 app
+#   ./build.sh --no-installer  skip Claude Codex Install          ./build.sh --no-gui   skip the Qt6 app
 #   ./build.sh --btrfs         installer default: btrfs zstd:22 (instead of ext4)
 #   ./build.sh --erofs         image type erofs (instead of squashfs)
 #   ./build.sh --no-cccu       skip CCCU (the container creator)
 #   ./build.sh --installer-mode=clone|new|distro
-#                              ClaudeInstall's mode (asked when not given): clone installs the cloned
+#                              Claude Codex Install's mode (asked when not given): clone installs the cloned
 #                              live ISO; new = new-system installer (users, packages); distro = the
 #                              claudemods distributions online (pacstrap + profile, Arch only)
 #   ./build.sh --installer-ui=gui|tui|both
-#                              ClaudeInstall's interface (asked when not given): Qt6 window, terminal
+#                              Claude Codex Install's interface (asked when not given): Qt6 window, terminal
 #                              (claudeinstall-tui) or both. --installer-tui = both
 #   ./build.sh --no-launch     do not start the app at the end
 #   ./build.sh help            this text
@@ -88,7 +90,7 @@ detect_family() {
 }
 
 # ---- squashfs / erofs ----------------------------------------------------------
-# One image type for everything: the ISO the cloner builds and what ClaudeInstall unpacks.
+# One image type for everything: the ISO the cloner builds and what Claude Codex Install unpacks.
 erofs_supported() {
     case "$FAMILY" in alpine|gentoo) return 1 ;; esac
     return 0
@@ -131,7 +133,7 @@ choose_image_format() {
     elif [ "$ASSUME_YES" = 1 ]; then
         reply=1
     else
-        echo "System image type for the ISO (the cloner and ClaudeInstall both use it):"
+        echo "System image type for the ISO (the cloner and Claude Codex Install both use it):"
         echo "  1) Squashfs (default)"
         echo "  2) Erofs"
         reply=$(choose "Enter your choice (1 or 2):")
@@ -214,7 +216,7 @@ gentoo_prepare_portage() {
 install_host_tools() {
     say "Installing build and host tools for $DISTRO_NAME"
     # CCCU (cccu iso) runs the engine it carries itself: no compiler in the container unless
-    # ClaudeInstall is built there (CBL_NO_COMPILER=1 then is not set)
+    # Claude Codex Install is built there (CBL_NO_COMPILER=1 then is not set)
     CXX_DEB="g++ make"; CXX_ARCH="gcc make"; CXX_FEDORA="gcc-c++ make"; CXX_SUSE="gcc-c++ make"; CXX_APK="build-base"
     if [ -n "${CBL_NO_COMPILER:-}" ]; then
         CXX_DEB=""; CXX_ARCH=""; CXX_FEDORA=""; CXX_SUSE=""; CXX_APK=""
@@ -296,9 +298,9 @@ install_alpine_installer_tools() {
     apk add $PKGS
 }
 
-# What ClaudeInstall needs on the installed system's side: rsync / GRUB / EFI tools, per distro
+# What Claude Codex Install needs on the installed system's side: rsync / GRUB / EFI tools, per distro
 install_installer_runtime() {
-    say "Installing GRUB, efibootmgr and rsync (used by ClaudeInstall in the live ISO)"
+    say "Installing GRUB, efibootmgr and rsync (used by Claude Codex Install in the live ISO)"
     ARCH=$(uname -m)
     case "$FAMILY" in
         debian)
@@ -359,8 +361,8 @@ root_phase() {
 }
 
 # =============================================================================
-# ClaudeInstall configuration for the clone (root). Replaces the Calamares setup of the old
-# claudebackup-linux: same module sequence and the same image paths, now for ClaudeInstall.
+# Claude Codex Install configuration for the clone (root). Replaces the Calamares setup of the old
+# claudebackup-linux: same module sequence and the same image paths, now for Claude Codex Install.
 # $1 = 1 for btrfs zstd:22 as default, $2 = 1 for an erofs image
 # =============================================================================
 configure_installer() {
@@ -387,7 +389,7 @@ configure_installer() {
     esac
 
     if [ -f "$CFG/settings.conf" ] && [ ! -f "$CFG/.claudebackup" ] && [ ! -d "$CFG.orig" ]; then
-        say "Keeping the previous ClaudeInstall config in $CFG.orig"
+        say "Keeping the previous Claude Codex Install config in $CFG.orig"
         cp -a "$CFG" "$CFG.orig"
     fi
     mkdir -p "$MOD" "$CFG/scripts"
@@ -513,7 +515,7 @@ EOF
 
     # The image is a bind of "/", so a separate /boot (vfat ESP as /boot, Gentoo, Fedora) is empty
     # in the clone: give the installed system a kernel before the initramfs step. Runs on the live
-    # system (dontChroot); ClaudeInstall passes its target root as ${ROOT}.
+    # system (dontChroot); Claude Codex Install passes its target root as ${ROOT}.
     cat > "$CFG/scripts/cbl-kernel.sh" << 'EOF'
 #!/bin/sh
 R="${1:-}"
@@ -623,15 +625,15 @@ requirements:
         - root
 EOF
 
-    # The claudemods sidebar colours (claudeinstall-colors comes with ClaudeInstall)
+    # The claudemods sidebar colours (claudeinstall-colors comes with Claude Codex Install)
     if command -v claudeinstall-colors >/dev/null 2>&1; then claudeinstall-colors claudemods >/dev/null 2>&1 || true; fi
 
     install_installer_launcher
-    say "ClaudeInstall configured for $DISTRO_NAME (unpacks $UNPACK as $SOURCEFS, $FSTYPE default, $GRUB)"
+    say "Claude Codex Install configured for $DISTRO_NAME (unpacks $UNPACK as $SOURCEFS, $FSTYPE default, $GRUB)"
 }
 
-# Starts ClaudeInstall as root from the live desktop through pkexec, keeping the session's display
-# (pkexec drops it, and ClaudeInstall is a GUI). The root helper first matches the unpack settings
+# Starts Claude Codex Install as root from the live desktop through pkexec, keeping the session's display
+# (pkexec drops it, and Claude Codex Install is a GUI). The root helper first matches the unpack settings
 # to the ISO's real image (squashfs / erofs) and loads its kernel module.
 install_installer_launcher() {
     mkdir -p /usr/local/lib/claudebackup
@@ -657,11 +659,11 @@ EOF
 
     cat > /usr/local/bin/claudebackup-install << 'EOF'
 #!/bin/sh
-# Opens ClaudeInstall as root (the "Install ..." desktop shortcut of the claudebackup live ISO).
+# Opens Claude Codex Install as root (the "Install ..." desktop shortcut of the claudebackup live ISO).
 # Everything goes to a log, and if it does not start a message window says why, so a desktop
 # click never fails silently.
 LOG="/tmp/claudebackup-install-$(id -u).log"
-echo "=== $(date): starting ClaudeInstall (user $(id -un), session ${XDG_SESSION_TYPE:-?})" >> "$LOG"
+echo "=== $(date): starting Claude Codex Install (user $(id -un), session ${XDG_SESSION_TYPE:-?})" >> "$LOG"
 ROOT_HELPER=/usr/local/lib/claudebackup/install-root.sh
 # Only the terminal installer (claudeinstall-tui) was built: it runs in this terminal
 if ! command -v claudeinstall >/dev/null 2>&1; then
@@ -683,9 +685,9 @@ RC=$?
 echo "=== exit code $RC" >> "$LOG"
 if [ "$RC" -ne 0 ]; then
     case "$RC" in
-        126) MSG="ClaudeInstall was not started: the password prompt was cancelled or refused." ;;
-        127) MSG="ClaudeInstall was not started: a program was not found (claudeinstall or pkexec)." ;;
-        *)   MSG="ClaudeInstall stopped with an error (exit code $RC)." ;;
+        126) MSG="Claude Codex Install was not started: the password prompt was cancelled or refused." ;;
+        127) MSG="Claude Codex Install was not started: a program was not found (claudeinstall or pkexec)." ;;
+        *)   MSG="Claude Codex Install stopped with an error (exit code $RC)." ;;
     esac
     MSG="$MSG
 Details: $LOG"
@@ -702,14 +704,14 @@ EOF
 }
 
 # =============================================================================
-# ClaudeInstall (installer/): dependencies, build, install. Clone mode, Qt6 GUI.
+# Claude Codex Install (installer/): dependencies, build, install. Clone mode, Qt6 GUI.
 # (Was installer/build.sh; merged here so the compendium has one build script.)
 # =============================================================================
 IBUILD="$INSTALLER/build"
 
-# Root: what building ClaudeInstall needs, per distro
+# Root: what building Claude Codex Install needs, per distro
 install_claudeinstall_deps() {
-    say "Installing ClaudeInstall's build dependencies"
+    say "Installing Claude Codex Install's build dependencies"
     case "$FAMILY" in
         debian)
             apt-get update
@@ -751,7 +753,7 @@ build_claudeinstall() {
         both) IGUI=ON;  ITUI=ON ;;
         *)    IGUI=ON;  ITUI=OFF ;;
     esac
-    say "Building ClaudeInstall (installer/, interface: ${1:-gui})"
+    say "Building Claude Codex Install (installer/, interface: ${1:-gui})"
     # A partly copied tree (partition files landed in src/modules/) gives "Cannot find source file"
     M="$INSTALLER/src/modules"; P="$M/partition"
     if [ -d "$P" ]; then
@@ -765,21 +767,54 @@ build_claudeinstall() {
     fi
     GEN=Ninja
     command -v ninja >/dev/null 2>&1 || command -v samu >/dev/null 2>&1 || GEN="Unix Makefiles"
-    cmake -S "$INSTALLER" -B "$IBUILD" -G "$GEN" \
-        -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib \
-        -DINSTALL_CONFIG=ON -DWITH_QT6=ON -DWITH_GUI="$IGUI" -DWITH_TUI="$ITUI" || return 1
-    if [ "$GEN" = Ninja ]; then
-        RC=0
-        cmake --build "$IBUILD" -j "$(nproc 2>/dev/null || echo 2)" -- -k 0 > "$IBUILD/build.log" 2>&1 || RC=$?
-        grep -E 'error:|FAILED:' "$IBUILD/build.log" > "$IBUILD/errors.log" || true
-        tail -n 5 "$IBUILD/build.log"
-        if [ "$RC" -ne 0 ] || [ -s "$IBUILD/errors.log" ]; then
-            say "ClaudeInstall build failed: errors in $IBUILD/errors.log (full log: $IBUILD/build.log)"
-            return 1
-        fi
-    else
-        cmake --build "$IBUILD" -j "$(nproc 2>/dev/null || echo 2)" || return 1
+    mkdir -p "$IBUILD"
+
+    # 1. configure: shown live, kept in configure.log. If it fails NOTHING is compiled - the reason
+    #    (usually a missing package: KPMcore, KF6, yaml-cpp, polkit-qt6 ...) is in its last lines.
+    say "Claude Codex Install: configuring (CMake)"
+    if ! run_logged "$IBUILD/configure.log" cmake -S "$INSTALLER" -B "$IBUILD" -G "$GEN" \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib \
+            -DINSTALL_CONFIG=ON -DWITH_QT6=ON -DWITH_GUI="$IGUI" -DWITH_TUI="$ITUI"; then
+        say "Claude Codex Install: CMake configure FAILED - nothing was compiled. The reason is in the lines above"
+        say "(usually a missing package; full output: $IBUILD/configure.log)"
+        grep -E 'Could NOT find|not found|CMake Error' "$IBUILD/configure.log" | head -n 15
+        return 1
     fi
+    # modules CMake left out (their dependencies are missing) - they are simply not built
+    if grep -q 'Skipping module' "$IBUILD/configure.log"; then
+        say "Claude Codex Install: modules CMake skipped (with the reason - usually a missing dependency):"
+        grep 'Skipping module' "$IBUILD/configure.log" | sed 's/\x1b\[[0-9;]*m//g' | head -n 40
+    fi
+
+    # 2. compile: shown live, kept in build.log; one run lists every error (ninja -k 0) in errors.log
+    say "Claude Codex Install: compiling"
+    RC=0
+    if [ "$GEN" = Ninja ]; then
+        run_logged "$IBUILD/build.log" cmake --build "$IBUILD" -j "$(nproc 2>/dev/null || echo 2)" -- -k 0 || RC=$?
+    else
+        run_logged "$IBUILD/build.log" cmake --build "$IBUILD" -j "$(nproc 2>/dev/null || echo 2)" -- -k || RC=$?
+    fi
+    grep -E 'error:|FAILED:|Error [0-9]' "$IBUILD/build.log" > "$IBUILD/errors.log" || true
+    LAST=$(grep -oE '^\[[0-9]+/[0-9]+\]' "$IBUILD/build.log" | tail -n 1)
+    if [ "$RC" -ne 0 ] || [ -s "$IBUILD/errors.log" ]; then
+        NFAIL=$(grep -c 'FAILED:' "$IBUILD/errors.log" 2>/dev/null || true)
+        say "Claude Codex Install: compiling FAILED${LAST:+ (got to $LAST)} - ${NFAIL:-0} file(s) did not compile"
+        say "every error: $IBUILD/errors.log   full output: $IBUILD/build.log"
+        return 1
+    fi
+    say "Claude Codex Install: compiled${LAST:+ ($LAST)}"
+}
+
+# run_logged LOGFILE COMMAND...: shows the command's output live AND keeps it in LOGFILE;
+# returns the command's exit code (a plain "| tee" would return tee's)
+run_logged() {
+    _log=$1; shift
+    _rcf=$(mktemp)
+    # inside "if" set -e does not stop the group, so the exit code is always recorded
+    { if "$@" 2>&1; then echo 0 > "$_rcf"; else echo $? > "$_rcf"; fi; } | tee "$_log"
+    _rc=$(cat "$_rcf" 2>/dev/null || echo 1)
+    rm -f "$_rcf"
+    return "${_rc:-1}"
 }
 
 # Root: install the build, its commands and the claudemods presets. $1 = the installer's mode:
@@ -788,7 +823,7 @@ build_claudeinstall() {
 #   distro  the claudemods distributions online (pacstrap + profile, Arch only): settings-distro.conf
 install_claudeinstall() {
     IMODE="${1:-clone}"
-    say "Installing ClaudeInstall ($IMODE mode)"
+    say "Installing Claude Codex Install ($IMODE mode)"
     cmake --install "$IBUILD" || return 1
     mkdir -p /etc/claudeinstall/modules
     # claudeconfig (settings), claudeinstall-colors (sidebar colours), claudeinstall-pkgfix (package names)
@@ -907,27 +942,43 @@ install_cccu() {
 
 # =============================================================================
 # Phase 2 of a normal run, as root: install everything phase 1 built, then configure.
-# $1 qt6 app built (1/0), $2 ClaudeInstall built (1/0), $3 its mode (clone|new|distro),
+# $1 qt6 app built (1/0), $2 Claude Codex Install built (1/0), $3 its mode (clone|new|distro),
 # $4 btrfs default (1/0), $5 erofs image (1/0), $6 CCCU built (1/0)
 # =============================================================================
 install_all() {
-    say "[install] the cloner ($TARGET)"
+    say "[install] Claude Codex Backup ($TARGET)"
     make -C "$CLONER" install || return 1
     if [ "$1" = 1 ]; then
-        say "[install] the Qt6 app ($GUI_TARGET)"
+        say "[install] Claude Codex Backup Qt6 app ($GUI_TARGET)"
         cmake --install "$GUI_BUILD" || return 1
     fi
     if [ "$2" = 1 ]; then
         install_claudeinstall "$3" || return 1
         if [ "$3" = clone ]; then
-            say "[install] configuring ClaudeInstall to install the clone"
+            say "[install] configuring Claude Codex Install to install the clone"
             configure_installer "$4" "$5"
         fi
     fi
     if [ "$6" = 1 ]; then
-        say "[install] CCCU"
+        say "[install] Claude Codex CCU"
         install_cccu || return 1
     fi
+    install_codex_commands
+}
+
+# claude-codex-* commands next to the original ones (links in /usr/local/bin), for the tools that
+# are installed; a link whose tool is not installed is removed
+install_codex_commands() {
+    say "[install] claude-codex-* commands"
+    for pair in claude-codex-backup:claudebackup-linux claude-codex-backup-gui:claudebackup-linux-qt6 \
+                claude-codex-install:claudeinstall claude-codex-install-tui:claudeinstall-tui \
+                claude-codex-ccu:cccu claude-codex-ccu-gui:cccu-gui; do
+        CMD=${pair%%:*}; REAL=${pair#*:}
+        rm -f "/usr/local/bin/$CMD"
+        TARGET_PATH=$(command -v "$REAL" 2>/dev/null) || continue
+        ln -s "$TARGET_PATH" "/usr/local/bin/$CMD" && say "  $CMD -> $TARGET_PATH"
+    done
+    return 0
 }
 
 # ---- Desktop shortcut ------------------------------------------------------
@@ -939,7 +990,7 @@ add_desktop_shortcut() {
         if command -v konsole >/dev/null 2>&1; then EXEC="konsole --hold -e $TARGET alpine"; IN_TERMINAL=false
         else EXEC="$TARGET alpine"; IN_TERMINAL=true; fi
     else
-        COMMENT="Install this cloned system to a disk (ClaudeInstall)"
+        COMMENT="Install this cloned system to a disk (Claude Codex Install)"
         ICON=claudeinstall
         EXEC=/usr/local/bin/claudebackup-install
         IN_TERMINAL=false
@@ -985,15 +1036,16 @@ Categories=System;"
 }
 
 # CCCU (cccu iso), as root INSIDE an Incus container after --root-phase: builds and installs
-# ClaudeInstall there, configures it for the clone and adds the Install shortcut, so the live ISO
+# Claude Codex Install there, configures it for the clone and adds the Install shortcut, so the live ISO
 # made from the container can install itself. $1 = 1 for btrfs zstd:22, $2 = 1 for an erofs image
 container_installer() {
     detect_family
-    [ "$FAMILY" != alpine ] || die "Alpine uses the cloner's own installer, not ClaudeInstall"
-    say "Building ClaudeInstall inside the container (installer/, clone mode)"
-    build_claudeinstall || die "ClaudeInstall did not build (see $IBUILD/errors.log)"
-    install_claudeinstall || die "ClaudeInstall could not be installed"
+    [ "$FAMILY" != alpine ] || die "Alpine uses the cloner's own installer, not Claude Codex Install"
+    say "Building Claude Codex Install inside the container (installer/, clone mode)"
+    build_claudeinstall || die "Claude Codex Install did not build (see $IBUILD/errors.log)"
+    install_claudeinstall || die "Claude Codex Install could not be installed"
     configure_installer "$1" "$2"
+    install_codex_commands
     DESK_USER=""
     DESK_HOME=/root
     add_desktop_shortcut
@@ -1013,7 +1065,7 @@ esac
 # User phase: questions, root phase, build, install, launch
 # =============================================================================
 ASSUME_YES=0; WANT_INSTALLER=""; WANT_GUI=1; WANT_BTRFS=""; WANT_EROFS=0; LAUNCH=1; WANT_CCCU=1
-IMODE=""; IUI=""   # ClaudeInstall's mode and interface: asked below unless given
+IMODE=""; IUI=""   # Claude Codex Install's mode and interface: asked below unless given
 for a in "$@"; do
     case "$a" in
         --yes|-y)       ASSUME_YES=1 ;;
@@ -1078,15 +1130,15 @@ INSTALLER_ON=0; BTRFS=0; ALPINE_TOOLS=0
 choose_image_format
 
 if [ "$FAMILY" = alpine ]; then
-    say "Alpine: the live ISO uses the cloner's own 'Install Cloned System To Disk' (not ClaudeInstall)"
+    say "Alpine: the live ISO uses the cloner's own 'Install Cloned System To Disk' (not Claude Codex Install)"
     if ask "Install the Alpine installer tools (sfdisk, mkfs, GRUB) so the ISO can install itself? [Y/n]" y; then
         ALPINE_TOOLS=1
     fi
-elif [ "$WANT_INSTALLER" = 1 ] || { [ "$WANT_INSTALLER" != 0 ] && ask "Build ClaudeInstall (the installer)? [Y/n]" y; }; then
+elif [ "$WANT_INSTALLER" = 1 ] || { [ "$WANT_INSTALLER" != 0 ] && ask "Build Claude Codex Install (the installer)? [Y/n]" y; }; then
     INSTALLER_ON=1
     # --- what it installs --------------------------------------------------
     if [ -z "$IMODE" ]; then
-        echo "What should ClaudeInstall install?"
+        echo "What should Claude Codex Install install?"
         echo "  1) The cloned system - the live ISOs built here install themselves (default)"
         echo "  2) A new system - creates users, installs packages (a normal distro installer)"
         N=2
@@ -1101,11 +1153,11 @@ elif [ "$WANT_INSTALLER" = 1 ] || { [ "$WANT_INSTALLER" != 0 ] && ask "Build Cla
         esac
     fi
     if [ "$IMODE" != clone ]; then
-        say "ClaudeInstall in $IMODE mode: the live ISOs made by the cloner get no 'Install' shortcut of their own"
+        say "Claude Codex Install in $IMODE mode: the live ISOs made by the cloner get no 'Install' shortcut of their own"
     fi
     # --- its interface -----------------------------------------------------
     if [ -z "$IUI" ]; then
-        echo "Which ClaudeInstall interface?"
+        echo "Which Claude Codex Install interface?"
         echo "  1) GUI - the Qt6 window (default)"
         echo "  2) TUI - in a terminal (claudeinstall-tui)"
         echo "  3) Both"
@@ -1118,18 +1170,18 @@ elif [ "$WANT_INSTALLER" = 1 ] || { [ "$WANT_INSTALLER" != 0 ] && ask "Build Cla
     # --- clone mode: the installed system's default filesystem --------------
     if [ "$IMODE" = clone ]; then
         if [ "$FAMILY" = fedora ]; then
-            say "Fedora: ClaudeInstall replaces Anaconda - Anaconda's installer shortcuts are left out of the ISO"
+            say "Fedora: Claude Codex Install replaces Anaconda - Anaconda's installer shortcuts are left out of the ISO"
         fi
         if [ -n "$WANT_BTRFS" ]; then
             BTRFS="$WANT_BTRFS"
         else
-            echo "ClaudeInstall default filesystem for the installed system:"
+            echo "Claude Codex Install default filesystem for the installed system:"
             echo "  1) Ext4 (default)"
             echo "  2) Btrfs with level 22 compression (zstd:22)"
             [ "$(choose "Enter your choice (1 or 2):")" = 2 ] && BTRFS=1
         fi
     fi
-    say "ClaudeInstall: $IMODE mode, $IUI interface"
+    say "Claude Codex Install: $IMODE mode, $IUI interface"
 fi
 IMODE="${IMODE:-clone}"; IUI="${IUI:-gui}"
 if [ "$WANT_GUI" = 1 ] && ! ask "Build the Qt6 app (claudebackup-linux-qt6)? [Y/n]" y; then WANT_GUI=0; fi
@@ -1160,11 +1212,11 @@ finalize_image_format
 JOBS="$(nproc 2>/dev/null || echo 1)"
 GUI_OK=0; INSTALLER_OK=0; CCCU_OK=0
 
-say "[build 1/4] the cloner (cloner/)"
+say "[build 1/4] Claude Codex Backup - the cloner (cloner/)"
 make -C "$CLONER" -j"$JOBS" || die "the cloner did not build - see the messages above"
 
 if [ "$WANT_GUI" = 1 ]; then
-    say "[build 2/4] the Qt6 app (cloner-qt6/)"
+    say "[build 2/4] Claude Codex Backup - the Qt6 app (cloner-qt6/)"
     GEN=""
     if command -v ninja >/dev/null 2>&1 || command -v samu >/dev/null 2>&1; then GEN="-G Ninja"; fi
     # shellcheck disable=SC2086
@@ -1175,29 +1227,29 @@ if [ "$WANT_GUI" = 1 ]; then
         say "The Qt6 app did not build - it is skipped, the terminal menu ($TARGET) still works."
     fi
 else
-    say "[build 2/4] the Qt6 app: skipped (--no-gui)"
+    say "[build 2/4] Claude Codex Backup Qt6 app: skipped (--no-gui)"
 fi
 
 if [ "$INSTALLER_ON" = 1 ]; then
-    say "[build 3/4] ClaudeInstall (installer/, $IMODE mode, $IUI)"
+    say "[build 3/4] Claude Codex Install (installer/, $IMODE mode, $IUI)"
     if build_claudeinstall "$IUI"; then
         INSTALLER_OK=1
     else
-        say "ClaudeInstall did not build (errors: $IBUILD/errors.log) - it is skipped; fix them and run ./build.sh again."
+        say "Claude Codex Install did not build (errors: $IBUILD/errors.log) - it is skipped; fix them and run ./build.sh again."
     fi
 else
-    say "[build 3/4] ClaudeInstall: skipped"
+    say "[build 3/4] Claude Codex Install: skipped"
 fi
 
 if [ "$WANT_CCCU" = 1 ]; then
-    say "[build 4/4] CCCU (cccu/)"
+    say "[build 4/4] Claude Codex CCU (cccu/)"
     if build_cccu "$WANT_GUI"; then
         CCCU_OK=1
     else
-        say "CCCU did not build (it needs GCC 14+ and CMake 3.25+) - it is skipped."
+        say "Claude Codex CCU did not build (it needs GCC 14+ and CMake 3.25+) - it is skipped."
     fi
 else
-    say "[build 4/4] CCCU: skipped"
+    say "[build 4/4] Claude Codex CCU: skipped"
 fi
 
 # =============================================================================
@@ -1209,19 +1261,19 @@ as_root sh "$SELF" --install-all "$GUI_OK" "$INSTALLER_OK" "$IMODE" "$BTRFS" "$E
 command -v "$TARGET" >/dev/null 2>&1 || die "$TARGET is not on PATH after install"
 [ "$INSTALLER_OK" = 1 ] || INSTALLER_ON=0
 
-# (the shortcut opens the clone installer: not for ClaudeInstall's new / distro modes)
+# (the shortcut opens the clone installer: not for Claude Codex Install's new / distro modes)
 if { [ "$INSTALLER_ON" = 1 ] && [ "$IMODE" = clone ]; } || [ "$ALPINE_TOOLS" = 1 ]; then add_desktop_shortcut; fi
 
-say "Done."
-say "  Terminal menu:  $TARGET"
-[ "$GUI_OK" = 1 ] && say "  Qt6 app:        $GUI_TARGET (also in the applications menu as 'claudebackup linux')"
+say "Done - Claude Codex Compendium v1.0 01-11-2026"
+say "  Claude Codex Backup:   $TARGET  /  claude-codex-backup  (terminal menu)"
+[ "$GUI_OK" = 1 ] && say "  Claude Codex Backup:   $GUI_TARGET  /  claude-codex-backup-gui  (applications menu)"
 if [ "$INSTALLER_ON" = 1 ]; then
     case "$IMODE" in
-        clone) say "  Installer:      ClaudeInstall ($IUI) - 'Install' shortcut / claudebackup-install in the live ISO" ;;
-        *)     say "  Installer:      ClaudeInstall, $IMODE mode: sudo claudeinstall$([ "$IUI" != gui ] && echo '  /  sudo claudeinstall-tui')" ;;
+        clone) say "  Claude Codex Install:  $IUI - 'Install' shortcut / claudebackup-install in the live ISO" ;;
+        *)     say "  Claude Codex Install:  $IMODE mode: sudo claude-codex-install$([ "$IUI" != gui ] && echo '  /  sudo claude-codex-install-tui')" ;;
     esac
 fi
-[ "$CCCU_OK" = 1 ] && say "  Containers:     sudo cccu  /  cccu-gui (CCCU in the applications menu)"
+[ "$CCCU_OK" = 1 ] && say "  Claude Codex CCU:      sudo claude-codex-ccu  /  claude-codex-ccu-gui  (applications menu)"
 printf '\033[0m'
 
 [ "$LAUNCH" = 1 ] || exit 0

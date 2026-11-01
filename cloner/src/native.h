@@ -757,7 +757,7 @@ inline void writeDotDisk(const Context& c) {
     writeFile(dd + "/info", iso + "\n");
     writeFile(dd + "/id/" + uuid, "");
     writeFile(dd + "/README.md",
-        "# claudebackup linux " + APP_VERSION + "\n\nVolinfo: " + iso + "\nImage created at: " + ts + "\n");
+        "# " + APP_NAME + " " + APP_RELEASE + "\n\nVolinfo: " + iso + "\nImage created at: " + ts + "\n");
 }
 
 // The ISO stage. xorriso runs in the background (its output goes to a log) while the same green animated bar as

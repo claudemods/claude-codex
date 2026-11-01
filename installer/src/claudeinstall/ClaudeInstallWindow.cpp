@@ -403,7 +403,8 @@ ClaudeInstallWindow::ClaudeInstallWindow( QWidget* parent )
     CLAUDEINSTALL_RETRANSLATE( const auto* branding = ClaudeInstall::Branding::instance();
                            setWindowTitle( ClaudeInstall::Settings::instance()->isSetupMode()
                                                ? tr( "%1 Setup Program" ).arg( branding->productName() )
-                                               : tr( "%1 Installer" ).arg( branding->productName() ) ); );
+                                               : tr( "%1 Installer" ).arg( branding->productName() ) );
+                           setWindowTitle( windowTitle() + QStringLiteral( " - Claude Codex Install" ) ); );
 
     const ClaudeInstall::Branding* const branding = ClaudeInstall::Branding::instance();
     using ImageEntry = ClaudeInstall::Branding::ImageEntry;

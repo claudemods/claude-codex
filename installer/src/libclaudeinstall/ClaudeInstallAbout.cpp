@@ -59,7 +59,9 @@ aboutMaintainers()
 static QString
 substituteVersions( const QString& s )
 {
-    return s.arg( CLAUDEINSTALL_APPLICATION_NAME ).arg( CLAUDEINSTALL_VERSION );
+    // Claude Codex Install, part of the Claude Codex Compendium (ClaudeInstall underneath)
+    return s.arg( QStringLiteral( "Claude Codex Install" ) )
+        .arg( QString::fromLatin1( "Compendium v1.0 01-11-2026 (ClaudeInstall " CLAUDEINSTALL_VERSION ")" ) );
 }
 
 const QString

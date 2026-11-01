@@ -20,7 +20,9 @@
 
 </div>
 
-# ClaudeInstall
+# Claude Codex Install (ClaudeInstall)
+
+**Claude Codex Compendium v1.0 01-11-2026**
 
 A distribution-independent Linux system installer written entirely in C++ (Qt6), derived from
 Calamares. It has an advanced partitioning module (manual and automated), and distributions

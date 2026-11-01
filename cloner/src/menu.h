@@ -269,7 +269,7 @@ int showMenu(const std::string& title, const std::vector<std::string>& items, in
     std::string line;
     while (std::getline(ascii_stream, line)) menuBuffer += COLOR_RED + line + COLOR_RESET + "\n";
 
-    menuBuffer += COLOR_RED + "                    " + APP_NAME + " " + APP_VERSION + COLOR_RESET + update::statusText() + "\n";
+    menuBuffer += COLOR_RED + "                    " + APP_NAME + "  " + APP_RELEASE + COLOR_RESET + update::statusText() + "\n";
     menuBuffer += COLOR_RED + "Back up your running " + sysDistro().prettyName + " system as a bootable live ISO" + COLOR_RESET + "\n";
     menuBuffer += COLOR_RED + "Sailing the 7 seas like Penguin's Eggs Remastersys, Refracta, Systemback and father Knoppix!" + COLOR_RESET + "\n";
     {
@@ -384,7 +384,7 @@ std::string guideText() {
 
 void showGuide() {
     clearScreen();
-    std::cout << COLOR_CYAN << APP_NAME << " " << APP_VERSION << " - guide (" << sysDistro().prettyName << ")"
+    std::cout << COLOR_CYAN << APP_NAME << "  " << APP_RELEASE << " - guide (" << sysDistro().prettyName << ")"
               << COLOR_RESET << "\n\n" << COLOR_GREEN << guideText() << COLOR_RESET;
     pressAnyKey();
 }
@@ -754,7 +754,7 @@ std::vector<std::string> mainMenuItems() {
 void updateApp() {
     clearScreen();
     std::cout << COLOR_CYAN << "Update " << APP_NAME << COLOR_RESET << "\n" << COLOR_GREEN
-              << "Installed: " << APP_VERSION << "\n"
+              << "Installed: " << APP_VERSION << " (" << APP_RELEASE << ")\n"
               << "Checking " << REPO_URL << " ..." << COLOR_RESET << std::endl;
     std::string latest = update::latestVersion();
     if (latest.empty()) {

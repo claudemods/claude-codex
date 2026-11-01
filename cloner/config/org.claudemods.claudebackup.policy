@@ -8,7 +8,7 @@
   <vendor>claudemods</vendor>
   <vendor_url>https://github.com/claudemods</vendor_url>
   <action id="org.claudemods.claudebackup.run">
-    <description>Run claudebackup linux as administrator</description>
+    <description>Run Claude Codex Backup as administrator</description>
     <message>Authentication is required to clone the system, write drives or change the installer configuration</message>
     <icon_name>drive-harddisk</icon_name>
     <defaults>

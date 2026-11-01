@@ -51,6 +51,9 @@
 
 namespace
 {
+// The release every Claude Codex tool shows
+const char* const kRelease = "Compendium v1.0 01-11-2026";
+
 QWidget*
 pageHeader( const QString& title, const QString& subtitle )
 {
@@ -186,7 +189,7 @@ MainWindow::MainWindow( QWidget* parent )
     : QMainWindow( parent )
     , m_backend( new Backend( this ) )
 {
-    setWindowTitle( tr( "claudebackup linux" ) );
+    setWindowTitle( tr( "Claude Codex Backup - %1" ).arg( QString::fromLatin1( kRelease ) ) );
     setWindowIcon( QIcon::fromTheme( QStringLiteral( "drive-harddisk" ) ) );
     setMinimumSize( 980, 640 );
     resize( 1200, 780 );
@@ -203,9 +206,9 @@ MainWindow::MainWindow( QWidget* parent )
     auto* sl = new QVBoxLayout( side );
     sl->setContentsMargins( 14, 20, 14, 14 );
     sl->setSpacing( 10 );
-    auto* brand = new QLabel( QStringLiteral( "claudebackup" ) );
+    auto* brand = new QLabel( QStringLiteral( "Claude Codex" ) );
     brand->setObjectName( QStringLiteral( "brand" ) );
-    auto* brandSub = new QLabel( tr( "linux system cloner" ) );
+    auto* brandSub = new QLabel( tr( "BACKUP  ·  %1" ).arg( QString::fromLatin1( kRelease ) ) );
     brandSub->setObjectName( QStringLiteral( "brandSub" ) );
     sl->addWidget( brand );
     sl->addWidget( brandSub );
@@ -321,8 +324,10 @@ MainWindow::refreshStatus()
     {
         m_guide->setPlainText( m_backend->guide() );
     }
-    m_versionLabel->setText( tr( "%1 %2 on %3" )
+    // "Claude Codex Backup  Compendium v1.0 01-11-2026  (cloner v1.0) on CachyOS"
+    m_versionLabel->setText( tr( "%1  %2  (cloner %3) on %4" )
                                  .arg( m_status.value( QStringLiteral( "app" ) ),
+                                       m_status.value( QStringLiteral( "release" ), QString::fromLatin1( kRelease ) ),
                                        m_status.value( QStringLiteral( "version" ) ),
                                        m_status.value( QStringLiteral( "distro" ) ) ) );
     m_mkinitcpio->setVisible( isArch() );
@@ -339,7 +344,7 @@ MainWindow::makeOverviewPage()
     l->setSpacing( 16 );
     l->addWidget( pageHeader( tr( "Overview" ),
                               tr( "Clone this running system into a bootable live ISO - a full clone: users, passwords, "
-                                  "settings and /home exactly as they are. ClaudeInstall puts it back on a disk." ) ) );
+                                  "settings and /home exactly as they are. Claude Codex Install puts it back on a disk." ) ) );
 
     auto* hero = card();
     hero->setObjectName( QStringLiteral( "hero" ) );
@@ -464,9 +469,9 @@ MainWindow::fillOverview()
     else if ( installer != QLatin1String( "none" ) )
     {
         add( installerReady ? Ok : Warn,
-             tr( "ClaudeInstall" ),
+             tr( "Claude Codex Install" ),
              installerReady ? tr( "Installed and configured to put this clone on a disk from the live ISO." )
-                            : tr( "Not set up: the live ISO would have no installer. Run build.sh in the compendium folder and answer yes to ClaudeInstall." ) );
+                            : tr( "Not set up: the live ISO would have no installer. Run build.sh in the compendium folder and answer yes to Claude Codex Install." ) );
     }
 
     const bool erofs = s.value( QStringLiteral( "imageFormat" ) ) == QLatin1String( "erofs" );
@@ -517,7 +522,7 @@ MainWindow::fillOverview()
     // CCCU, the compendium's container creator (cccu/): a separate program with its own window
     const QString cccu = QStandardPaths::findExecutable( QStringLiteral( "cccu-gui" ) );
     add( cccu.isEmpty() ? Info : Ok,
-         tr( "CCCU containers" ),
+         tr( "Claude Codex CCU (containers)" ),
          cccu.isEmpty() ? tr( "Not installed - build.sh builds it on Arch, Debian, Fedora and openSUSE (needs GCC 14+)." )
                         : tr( "Clone this system into an Incus container, or build a live ISO of a container." ),
          cccu.isEmpty() ? QString() : tr( "Open" ),
@@ -525,7 +530,7 @@ MainWindow::fillOverview()
          {
              if ( !QProcess::startDetached( cccu, {} ) )
              {
-                 QMessageBox::warning( this, tr( "CCCU" ), tr( "%1 could not be started." ).arg( cccu ) );
+                 QMessageBox::warning( this, tr( "Claude Codex CCU" ), tr( "%1 could not be started." ).arg( cccu ) );
              }
          } );
     m_checks->addStretch( 1 );
@@ -696,7 +701,7 @@ MainWindow::startBuild()
     if ( m_status.value( QStringLiteral( "installer" ) ) == QLatin1String( "claudeinstall" ) && !m_status.flag( QStringLiteral( "installerReady" ) )
          && QMessageBox::question( this,
                                    tr( "Build ISO" ),
-                                   tr( "ClaudeInstall is not set up, so the live ISO will not be able to install itself to a disk.\n\nBuild anyway?" ) )
+                                   tr( "Claude Codex Install is not set up, so the live ISO will not be able to install itself to a disk.\n\nBuild anyway?" ) )
              != QMessageBox::Yes )
     {
         return;
@@ -942,7 +947,7 @@ MainWindow::makeConfigsPage()
     l->setSpacing( 14 );
     l->addWidget( pageHeader( tr( "Edit Configs" ),
                               tr( "Boot and initramfs files are your own copies, used by every build until reset. "
-                                  "ClaudeInstall's files are the system's own: they go into the clone and decide how it installs." ) ) );
+                                  "Claude Codex Install's files are the system's own: they go into the clone and decide how it installs." ) ) );
 
     auto* split = new QSplitter( Qt::Horizontal );
     auto* listCard = card();
@@ -1121,7 +1126,7 @@ MainWindow::fillConfigs()
     }
     if ( !m_status.installerFiles.isEmpty() )
     {
-        header( tr( "ClaudeInstall (installs the clone)" ) );
+        header( tr( "Claude Codex Install (installs the clone)" ) );
         for ( const auto& f : m_status.installerFiles )
         {
             auto* it = new QListWidgetItem( f.label );
@@ -1172,7 +1177,7 @@ MainWindow::loadConfigItem( QListWidgetItem* item )
     else
     {
         m_editor->setPlainText( custom ? tr( "No copy yet.\n\n\"Create My Copy\" makes one from what the build generates for %1." ).arg( m_status.value( QStringLiteral( "distro" ) ) )
-                                       : tr( "Not installed. Run build.sh in the compendium folder and answer yes to ClaudeInstall." ) );
+                                       : tr( "Not installed. Run build.sh in the compendium folder and answer yes to Claude Codex Install." ) );
     }
     m_editorDirty = false;
     m_configCreate->setVisible( custom && !exists );
@@ -1427,13 +1432,13 @@ MainWindow::makeInstallPage()
 
     m_installStack = new QStackedWidget;
 
-    // 0: ClaudeInstall
+    // 0: Claude Codex Install
     auto* ci = card();
     auto* cil = new QVBoxLayout( ci );
     cil->setContentsMargins( 22, 18, 22, 18 );
     cil->setSpacing( 10 );
-    cil->addWidget( sectionLabel( tr( "ClaudeInstall" ) ) );
-    auto* about = new QLabel( tr( "ClaudeInstall partitions the disk (ext4 or btrfs, erase or manual), unpacks the ISO's image, writes a new fstab and "
+    cil->addWidget( sectionLabel( tr( "Claude Codex Install" ) ) );
+    auto* about = new QLabel( tr( "Claude Codex Install partitions the disk (ext4 or btrfs, erase or manual), unpacks the ISO's image, writes a new fstab and "
                                   "machine-id, builds the initramfs and installs GRUB for UEFI or BIOS. No users are created: the clone's "
                                   "accounts carry over." ) );
     about->setWordWrap( true );
@@ -1441,7 +1446,7 @@ MainWindow::makeInstallPage()
     m_installerState = new QLabel;
     m_installerState->setWordWrap( true );
     cil->addWidget( m_installerState );
-    m_launchInstaller = button( tr( "Launch ClaudeInstall" ), QStringLiteral( "system-software-install" ), "primary" );
+    m_launchInstaller = button( tr( "Launch Claude Codex Install" ), QStringLiteral( "system-software-install" ), "primary" );
     auto* launchRow = new QHBoxLayout;
     launchRow->addWidget( m_launchInstaller );
     launchRow->addStretch( 1 );
@@ -1502,8 +1507,8 @@ MainWindow::fillInstall()
     const bool ready = m_status.flag( QStringLiteral( "installerReady" ) );
     const bool available = m_status.value( QStringLiteral( "installer" ) ) == QLatin1String( "claudeinstall" );
     m_installerState->setText( !available ? tr( "<span style='color:#ff5c6c'>This distro is not supported.</span>" )
-                               : ready    ? tr( "<span style='color:#5fbf7a'>✓ ClaudeInstall is installed and configured for this clone.</span>" )
-                                          : tr( "<span style='color:#e5c07b'>! ClaudeInstall is not set up. Run build.sh in the compendium folder and answer yes to ClaudeInstall, "
+                               : ready    ? tr( "<span style='color:#5fbf7a'>✓ Claude Codex Install is installed and configured for this clone.</span>" )
+                                          : tr( "<span style='color:#e5c07b'>! Claude Codex Install is not set up. Run build.sh in the compendium folder and answer yes to Claude Codex Install, "
                                                 "then build the ISO again.</span>" ) );
     m_launchInstaller->setEnabled( available && ready );
 }
@@ -1518,7 +1523,7 @@ MainWindow::launchInstaller()
     {
         QMessageBox::information( this,
                                   tr( "Install" ),
-                                  tr( "ClaudeInstall was built as the terminal installer only.\n\n"
+                                  tr( "Claude Codex Install was built as the terminal installer only.\n\n"
                                       "Use the \"Install\" shortcut on the Desktop, or run  claudebackup-install  in a terminal." ) );
         return;
     }
@@ -1533,7 +1538,7 @@ MainWindow::launchInstaller()
     }
     if ( !started )
     {
-        QMessageBox::warning( this, tr( "Install" ), tr( "ClaudeInstall could not be started (%1)." ).arg( launcher ) );
+        QMessageBox::warning( this, tr( "Install" ), tr( "Claude Codex Install could not be started (%1)." ).arg( launcher ) );
     }
 }
 

@@ -22,7 +22,7 @@ using namespace cccu;
 namespace {
 
 void usage() {
-    std::cout << R"(CCCU - Claudemods Container Creator Utility
+    std::cout << R"(Claude Codex CCU - Container Creator Utility (Claude Codex Compendium v1.0 01-11-2026)
 tty host + KDE desktop in an Incus system container
 
 Typical flow
@@ -55,7 +55,7 @@ iso options
   --iso-tag <label>         Arch volume label (default 2026)
   --no-ram                  no "copy to RAM" boot entry
   --keep-pkg-cache          leave package caches in the image
-  --no-installer            do not put the ClaudeInstall installer on the ISO
+  --no-installer            do not put Claude Codex Install on the ISO
   --installer-btrfs         that installer defaults to btrfs zstd:22
   --on-console              run now on VT1 like the first-boot service, with its progress display
   --on-reboot               set it up now and build on the NEXT BOOT (first-boot style, on VT1), then the

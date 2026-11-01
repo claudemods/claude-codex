@@ -113,8 +113,8 @@ main( int argc, char* argv[] )
     ClaudeInstallApplication a( argc, argv );
 
     KAboutData aboutData( "claudeinstall",
-                          "ClaudeInstall",
-                          a.applicationVersion(),
+                          "Claude Codex Install",
+                          QStringLiteral( "Compendium v1.0 01-11-2026" ),
                           "The universal system installer",
                           KAboutLicense::GPL_V3,
                           QString(),

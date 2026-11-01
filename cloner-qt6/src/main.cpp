@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: claudemods
 // SPDX-License-Identifier: MIT
 //
-// claudebackup-linux-qt6: the graphical front end of the claudebackup linux cloner.
+// claudebackup-linux-qt6: Claude Codex Backup, the graphical front end of the cloner
+// (Claude Codex Compendium v1.0 01-11-2026).
 // Run it as your normal user; it asks for the administrator password (polkit) when a task needs it.
 
 #include "MainWindow.h"
@@ -73,7 +74,7 @@ main( int argc, char* argv[] )
 {
     QApplication app( argc, argv );
     QApplication::setApplicationName( QStringLiteral( "claudebackup-linux-qt6" ) );
-    QApplication::setApplicationDisplayName( QStringLiteral( "claudebackup linux" ) );
+    QApplication::setApplicationDisplayName( QStringLiteral( "Claude Codex Backup" ) );
     QApplication::setOrganizationName( QStringLiteral( "claudemods" ) );
     QApplication::setDesktopFileName( QStringLiteral( "claudebackup-linux-qt6" ) );
     QApplication::setWindowIcon( QIcon::fromTheme( QStringLiteral( "drive-harddisk" ) ) );

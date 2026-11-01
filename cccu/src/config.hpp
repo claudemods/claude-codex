@@ -70,7 +70,7 @@ struct Options {
     std::string iso_format = "squashfs";   // squashfs | erofs
     bool iso_ram = true;                   // adds a "copy to RAM" boot entry
     bool iso_clean_cache = true;           // package caches stay out of the image
-    bool iso_installer = true;             // ClaudeInstall on the ISO, to install it to a disk
+    bool iso_installer = true;             // Claude Codex Install on the ISO, to install it to a disk
     bool iso_btrfs = false;                // that installer defaults to btrfs zstd:22
     bool on_console = false;               // run on VT1 like the first-boot service shows its progress
     bool on_reboot = false;                // set it up now, build on the next boot (first-boot style, on VT1)

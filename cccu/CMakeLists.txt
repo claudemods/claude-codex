@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
-set(CCCU_RELEASE_DATE "30-10-2026")
-project(cccu VERSION 1.0 DESCRIPTION "Claudemods Container Creator Utility" LANGUAGES CXX)
+set(CCCU_RELEASE_DATE "01-11-2026")   # Claude Codex Compendium v1.0 01-11-2026
+project(cccu VERSION 1.0 DESCRIPTION "Claude Codex CCU - Container Creator Utility" LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

@@ -1,11 +1,11 @@
 [Desktop Entry]
 Type=Application
-Name=CCCU
+Name=Claude Codex CCU
 GenericName=Container Creator
-Comment=Claudemods Container Creator Utility - clone your Linux into an Incus container
+Comment=Container Creator Utility - clone your Linux into an Incus container (Claude Codex Compendium v1.0 01-11-2026)
 Exec=@CMAKE_INSTALL_FULL_BINDIR@/cccu-gui
 Icon=cccu
 Terminal=false
 Categories=System;Settings;
-Keywords=incus;container;installer;clone;kde;
+Keywords=claude;codex;ccu;incus;container;installer;clone;kde;
 StartupWMClass=cccu-gui

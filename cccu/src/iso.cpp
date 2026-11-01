@@ -241,7 +241,7 @@ Result create_iso(Options o) {
 
     // The tools the engine runs (xorriso, mksquashfs, bootloaders) come from the container's own package manager,
     // through the compendium's build.sh (--root-phase). With the installer on, --container-installer then builds
-    // ClaudeInstall inside the container and configures it to install the clone. Done once per setup.
+    // Claude Codex Install inside the container and configures it to install the clone. Done once per setup.
     const std::string marker = std::string(kStateDir) + "/ready-" + CCCU_VERSION + "-" + family + "-" + (o.iso_installer ? "c" : "n") +
                                (o.iso_btrfs ? "b" : "e") + (o.iso_format == "erofs" ? "f" : "s");
     const bool ready = !dry_run() && in_container(o.name, "test -e '" + marker + "'", quiet_query()).ok();
@@ -250,7 +250,7 @@ Result create_iso(Options o) {
     } else {
         if (!dry_run()) {
             // Everything the provisioning needs travels inside cccu, so it never has to download or find a file:
-            // the compendium bundle (build.sh + ClaudeInstall sources), and for the non-Arch families the bootloader
+            // the compendium bundle (build.sh + Claude Codex Install sources), and for the non-Arch families the bootloader
             // files (Arch has its own in the engine).
             if (!write_blob(stage / "compendium-provision.tar.gz", iso_embed::provision())) return fail("could not write the provisioning bundle");
             if (iso_embed::bootloaders().size() > 0 && !write_blob(stage / "resources/bootloaders.tar.gz", iso_embed::bootloaders())) {
@@ -281,10 +281,10 @@ Result create_iso(Options o) {
         };
         bool installer_done = o.iso_installer;
         if (o.iso_installer) {
-            info("ClaudeInstall is built inside the container the first time (this takes a while).");
+            info("Claude Codex Install is built inside the container the first time (this takes a while).");
             if (!provision(true) || !build_installer()) {
                 // The ISO itself does not need the installer: it is still built, just without "Install" on its desktop.
-                warn("ClaudeInstall could not be built in this container; building the ISO without an installer.");
+                warn("Claude Codex Install could not be built in this container; building the ISO without an installer.");
                 installer_done = false;
                 if (!provision(false)) return fail("installing the ISO tools in the container failed (see above)");
             }

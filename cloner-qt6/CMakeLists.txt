@@ -1,4 +1,4 @@
-# claudebackup-linux-qt6: the Qt6 front end of the claudebackup linux cloner (../cloner).
+# claudebackup-linux-qt6: Claude Codex Backup, the Qt6 front end of the cloner (../cloner).
 # Built and installed by the compendium's build.sh; by hand:
 #   cmake -S cloner-qt6 -B build-qt6 -DCMAKE_BUILD_TYPE=Release && cmake --build build-qt6
 #   sudo cmake --install build-qt6
