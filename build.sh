@@ -1,0 +1,929 @@
+#!/bin/sh
+# build.sh - Claude Codex Compendium v1.0 (01-11-2026): the cloner, its Qt6 app, the
+# ClaudeInstall installer and CCCU (the container creator), in one go.
+#   1. detects the distro
+#   2. installs the build tools and the host tools the ISO build uses (per distro)
+#   3. builds and installs the cloner (cloner/, terminal menu + batch commands)
+#   4. builds and installs the Qt6 app (cloner-qt6/)
+#   5. builds and installs ClaudeInstall (installer/) and configures it to install the CLONE from
+#      the live ISO (unpacks its squashfs/erofs image; no users page - the clone keeps its users).
+#      Alpine has no ClaudeInstall here: the live ISO gets the cloner's own "Install Cloned System
+#      To Disk" instead (its tools are installed in step 2).
+#   6. builds and installs CCCU (cccu/: clone this system into an Incus container; its "Create ISO"
+#      uses the same cloner engine and ClaudeInstall) - Arch, Debian, Fedora, openSUSE; needs GCC 14+
+#   7. puts an "Install <distro>" shortcut on the Desktop (it is part of the clone, so the live
+#      ISO's desktop has it) and starts the app
+# Plain POSIX sh, so it also runs on a stock Alpine (sh build.sh) without bash.
+#
+#   ./build.sh                 everything, asking a few questions
+#   ./build.sh --yes           everything with the defaults, no questions
+#   ./build.sh --no-installer  skip ClaudeInstall          ./build.sh --no-gui   skip the Qt6 app
+#   ./build.sh --btrfs         installer default: btrfs zstd:22 (instead of ext4)
+#   ./build.sh --erofs         image type erofs (instead of squashfs)
+#   ./build.sh --no-cccu       skip CCCU (the container creator)
+#   ./build.sh --no-launch     do not start the app at the end
+#   ./build.sh help            this text
+set -e
+
+SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+SUITE="$(dirname "$SELF")"
+CLONER="$SUITE/cloner"
+GUI_SRC="$SUITE/cloner-qt6"
+GUI_BUILD="$SUITE/build-qt6"
+INSTALLER="$SUITE/installer"
+CCCU_SRC="$SUITE/cccu"
+TARGET="claudebackup-linux"
+GUI_TARGET="claudebackup-linux-qt6"
+
+# Messages are light green (like the app's [cbl] lines), the output of the commands after them is
+# dark green; "==>" and errors are red. say() leaves the terminal dark green for the commands' output.
+say() { printf '\033[1;31m==>\033[0;92m %s\033[0;32m\n' "$*"; }
+die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+printf '\033[32m'
+
+# Single-quote one argument for a shell command line (for su -c)
+q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
+# ---- privilege helper (sudo, doas, run0, pkexec or su) ----------------------
+as_root() {
+    if [ "$(id -u)" -eq 0 ]; then "$@"
+    elif command -v sudo   >/dev/null 2>&1; then sudo "$@"
+    elif command -v doas   >/dev/null 2>&1; then doas "$@"
+    elif command -v run0   >/dev/null 2>&1; then run0 "$@"
+    elif command -v pkexec >/dev/null 2>&1; then pkexec "$@"
+    else
+        cmd=""
+        for a in "$@"; do cmd="$cmd $(q "$a")"; done
+        su root -c "$cmd"
+    fi
+}
+
+# ---- distro detection (ID, then each ID_LIKE entry, as cloner/src/distro.h does) ----
+detect_family() {
+    [ -r /etc/os-release ] || die "/etc/os-release not found"
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    FAMILY=""
+    for id in ${ID:-} ${ID_LIKE:-}; do
+        case "$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')" in
+            debian|ubuntu|linuxmint|pop|kali|devuan|openkylin|quirinux|abellha|neon) FAMILY=debian ;;
+            arch|archlinux|archcraft|cachyos|endeavouros|garuda|rebornos)            FAMILY=arch ;;
+            fedora|nobara|rhel)                                                      FAMILY=fedora ;;
+            opensuse*|suse)                                                          FAMILY=opensuse ;;
+            alpine)                                                                  FAMILY=alpine ;;
+            gentoo|calculate|funtoo|pentoo)                                          FAMILY=gentoo ;;
+        esac
+        [ -n "$FAMILY" ] && break
+    done
+    [ -n "$FAMILY" ] || die "unsupported distro: ${PRETTY_NAME:-${ID:-unknown}}"
+    DISTRO_ID="$(printf '%s' "${ID:-linux}" | tr '[:upper:]' '[:lower:]')"
+    DISTRO_NAME="${PRETTY_NAME:-${NAME:-${ID:-Linux}}}"
+}
+
+# ---- squashfs / erofs ----------------------------------------------------------
+# One image type for everything: the ISO the cloner builds and what ClaudeInstall unpacks.
+erofs_supported() {
+    case "$FAMILY" in alpine|gentoo) return 1 ;; esac
+    return 0
+}
+
+install_squashfs_tools() {
+    say "Installing squashfs-tools"
+    case "$FAMILY" in
+        debian)   apt-get install -y squashfs-tools ;;
+        arch)     pacman -S --needed --noconfirm squashfs-tools ;;
+        fedora)   dnf install -y squashfs-tools ;;
+        opensuse) zypper --non-interactive --no-refresh install --no-recommends squashfs ;;
+        alpine)   apk add squashfs-tools ;;
+        gentoo)   emerge --noreplace --ask=n sys-fs/squashfs-tools ;;
+    esac
+}
+
+install_erofs_utils() {
+    erofs_supported || return 0
+    command -v mkfs.erofs >/dev/null 2>&1 && return 0
+    say "Installing erofs-utils (optional: only needed for erofs images)"
+    case "$FAMILY" in
+        debian)   apt-get install -y erofs-utils ;;
+        arch)     pacman -S --needed --noconfirm erofs-utils ;;
+        fedora)   dnf install -y erofs-utils ;;
+        opensuse) zypper --non-interactive --no-refresh install --no-recommends erofs-utils ;;
+    esac || say "erofs-utils is not available here - only the squashfs image format will work"
+}
+
+# Sets IMAGE (squashfs | erofs) and EROFS (1 when erofs was chosen and the kernel can mount it)
+choose_image_format() {
+    IMAGE=squashfs
+    EROFS=0
+    if ! erofs_supported; then
+        say "$DISTRO_NAME: the image type is squashfs (erofs is not supported on this distro)"
+        return 0
+    fi
+    if [ "$WANT_EROFS" = 1 ]; then
+        reply=2
+    elif [ "$ASSUME_YES" = 1 ]; then
+        reply=1
+    else
+        echo "System image type for the ISO (the cloner and ClaudeInstall both use it):"
+        echo "  1) Squashfs (default)"
+        echo "  2) Erofs"
+        reply=$(choose "Enter your choice (1 or 2):")
+    fi
+    if [ "$reply" = 2 ]; then
+        # The live ISO boots this kernel, so it must be able to mount erofs
+        if grep -qw erofs /proc/filesystems 2>/dev/null || modinfo erofs >/dev/null 2>&1; then
+            IMAGE=erofs
+            EROFS=1
+        else
+            say "This kernel has no erofs support (CONFIG_EROFS_FS), so the ISO could not boot an erofs image - using squashfs"
+        fi
+    fi
+}
+
+# The cloner reads its settings from ~/.config/claudebackup-linux/configuration.txt
+save_image_format() {
+    CFGDIR="$DESK_HOME/.config/claudebackup-linux"
+    CFGFILE="$CFGDIR/configuration.txt"
+    mkdir -p "$CFGDIR"
+    if [ -f "$CFGFILE" ] && grep -q '^imageFormat=' "$CFGFILE"; then
+        sed -i "s/^imageFormat=.*/imageFormat=$IMAGE/" "$CFGFILE"
+    else
+        echo "imageFormat=$IMAGE" >> "$CFGFILE"
+    fi
+    if [ -n "$DESK_USER" ]; then chown "$DESK_USER" "$CFGDIR" "$CFGFILE" 2>/dev/null || true; fi
+    say "Image type set to $IMAGE"
+}
+
+finalize_image_format() {
+    if [ "$IMAGE" = erofs ] && ! command -v mkfs.erofs >/dev/null 2>&1; then
+        say "mkfs.erofs is not available on $DISTRO_NAME - using squashfs"
+        IMAGE=squashfs
+    fi
+    save_image_format
+}
+
+# =============================================================================
+# Root phase: everything that installs packages or writes system files
+# =============================================================================
+
+# Gentoo: emerge refuses to work without the ::gentoo repository and a valid profile. Systems
+# installed from a live ISO often have neither (no repo, make.profile copied as a folder).
+gentoo_prepare_portage() {
+    REPO=$(portageq get_repo_path / gentoo 2>/dev/null || true)
+    [ -n "$REPO" ] || REPO=/var/db/repos/gentoo
+    if [ ! -d "$REPO/profiles" ]; then
+        say "No Gentoo repository in $REPO, fetching it (emerge-webrsync)"
+        mkdir -p "$REPO"
+        emerge-webrsync || emerge --sync
+    fi
+    [ -d "$REPO/profiles" ] || die "the Gentoo repository could not be fetched into $REPO"
+
+    MP=/etc/portage/make.profile
+    if [ ! -L "$MP" ] || [ ! -e "$MP" ]; then
+        WANT=""
+        if [ -f "$MP/parent" ]; then
+            WANT=$(head -n 1 "$MP/parent" | sed -e 's#^gentoo:##' -e 's#.*/profiles/##')
+        fi
+        if [ -z "$WANT" ] || [ ! -d "$REPO/profiles/$WANT" ]; then
+            GARCH=$(portageq envvar ARCH 2>/dev/null || echo amd64)
+            LIST=$(eselect profile list 2>/dev/null | grep '(stable)' | awk '{print $2}')
+            WANT=""
+            for suffix in /desktop/plasma /desktop ""; do
+                WANT=$(echo "$LIST" | grep -E "^default/linux/$GARCH/[0-9.]+$suffix\$" | sort -V | tail -n 1)
+                [ -n "$WANT" ] && break
+            done
+        fi
+        [ -n "$WANT" ] || die "no Gentoo profile found - pick one with: eselect profile list / set"
+        if [ -e "$MP" ] || [ -L "$MP" ]; then
+            rm -rf "$MP.livecd-backup"
+            mv "$MP" "$MP.livecd-backup"
+        fi
+        say "Setting the Gentoo profile to $WANT"
+        eselect profile set "$WANT"
+    fi
+}
+
+# Build tools (compiler, make) + the host tools the ISO build runs, per distro
+install_host_tools() {
+    say "Installing build and host tools for $DISTRO_NAME"
+    # CCCU (cccu iso) runs the engine it carries itself: no compiler in the container unless
+    # ClaudeInstall is built there (CBL_NO_COMPILER=1 then is not set)
+    CXX_DEB="g++ make"; CXX_ARCH="gcc make"; CXX_FEDORA="gcc-c++ make"; CXX_SUSE="gcc-c++ make"; CXX_APK="build-base"
+    if [ -n "${CBL_NO_COMPILER:-}" ]; then
+        CXX_DEB=""; CXX_ARCH=""; CXX_FEDORA=""; CXX_SUSE=""; CXX_APK=""
+    fi
+    # shellcheck disable=SC2086
+    case "$FAMILY" in
+        debian)
+            apt-get update
+            apt-get install -y $CXX_DEB xorriso mtools dosfstools curl tar unzip \
+                live-boot live-boot-initramfs-tools ;;
+        arch)
+            pacman -S --needed --noconfirm $CXX_ARCH libisoburn mtools dosfstools tar unzip \
+                mkinitcpio device-mapper gnupg ;;
+        fedora)
+            dnf install -y $CXX_FEDORA xorriso mtools dosfstools curl tar unzip dracut-live ;;
+        opensuse)
+            # refresh the repositories once; the later zypper calls reuse that metadata (--no-refresh)
+            zypper --non-interactive refresh || true
+            zypper --non-interactive --no-refresh install --no-recommends $CXX_SUSE xorriso mtools dosfstools curl tar unzip ;;
+        alpine)
+            apk add $CXX_APK xorriso mtools dosfstools curl tar util-linux ;;
+        gentoo)
+            gentoo_prepare_portage
+            emerge --noreplace --ask=n dev-libs/libisoburn sys-fs/mtools sys-fs/dosfstools \
+                net-misc/curl app-arch/unzip sys-kernel/dracut sys-fs/lvm2 ;;
+    esac
+}
+
+# Qt6 Widgets + CMake for the app (cloner-qt6/)
+install_gui_deps() {
+    say "Installing Qt6 and CMake for the claudebackup app"
+    case "$FAMILY" in
+        debian)   apt-get install -y cmake qt6-base-dev ;;
+        arch)     pacman -S --needed --noconfirm cmake qt6-base ;;
+        fedora)   dnf install -y cmake qt6-qtbase-devel ;;
+        opensuse) zypper --non-interactive --no-refresh install --no-recommends cmake qt6-base-devel ;;
+        alpine)   apk add cmake qt6-qtbase-dev ;;
+        gentoo)   emerge --noreplace --ask=n dev-build/cmake dev-qt/qtbase:6 ;;
+    esac
+}
+
+# BIOS/UEFI boot files the live ISO is made from (Arch uses the cloner's embedded claudemods zip
+# instead). Kept in a persistent folder; the cloner only reads it (BOOTLOADER_DIR in cloner/src/common.h).
+BOOTLOADER_URL="https://github.com/pieroproietti/penguins-bootloaders/releases/download/v26.1.16/bootloaders.tar.gz"
+BOOTLOADER_DIR="/usr/local/share/claudebackup-linux/bootloaders"
+install_bootloaders() {
+    [ "$FAMILY" = arch ] && return 0
+    [ -f "$BOOTLOADER_DIR/.download-complete" ] && return 0
+    # CCCU carries the boot files inside itself (resources/ of its provisioning bundle): no download
+    if [ -s "$SUITE/resources/bootloaders.tar.gz" ]; then
+        say "Installing the bootloaders (BIOS/UEFI boot files for the live ISO)"
+        rm -rf "$BOOTLOADER_DIR"
+        mkdir -p "$BOOTLOADER_DIR"
+        if tar -xzf "$SUITE/resources/bootloaders.tar.gz" --strip-components=1 -C "$BOOTLOADER_DIR"; then
+            echo ok > "$BOOTLOADER_DIR/.download-complete"
+            return 0
+        fi
+        say "The carried bootloader file could not be unpacked, downloading them instead"
+    fi
+    say "Downloading the bootloaders (BIOS/UEFI boot files for the live ISO)"
+    rm -rf "$BOOTLOADER_DIR"
+    mkdir -p "$BOOTLOADER_DIR"
+    if curl -fL --progress-bar --connect-timeout 20 --retry 3 --speed-time 30 --speed-limit 1024 "$BOOTLOADER_URL" -o "$BOOTLOADER_DIR.tar.gz" &&
+       tar -xzf "$BOOTLOADER_DIR.tar.gz" --strip-components=1 -C "$BOOTLOADER_DIR"; then
+        echo ok > "$BOOTLOADER_DIR/.download-complete"
+        rm -f "$BOOTLOADER_DIR.tar.gz"
+    else
+        rm -rf "$BOOTLOADER_DIR" "$BOOTLOADER_DIR.tar.gz"
+        die "the bootloaders could not be downloaded from $BOOTLOADER_URL"
+    fi
+}
+
+# Alpine: the tools the live ISO's "Install Cloned System To Disk" needs (they go into the clone)
+install_alpine_installer_tools() {
+    say "Installing the Alpine installer tools"
+    PKGS="sfdisk e2fsprogs btrfs-progs dosfstools squashfs-tools grub efibootmgr"
+    [ "$(uname -m)" = "x86_64" ] && PKGS="$PKGS grub-bios grub-efi"
+    # shellcheck disable=SC2086
+    apk add $PKGS
+}
+
+# What ClaudeInstall needs on the installed system's side: rsync / GRUB / EFI tools, per distro
+install_installer_runtime() {
+    say "Installing GRUB, efibootmgr and rsync (used by ClaudeInstall in the live ISO)"
+    ARCH=$(uname -m)
+    case "$FAMILY" in
+        debian)
+            PKGS="rsync efibootmgr dosfstools os-prober"
+            [ "$ARCH" = "x86_64" ] && PKGS="$PKGS grub-pc-bin grub-efi-amd64-bin"
+            # shellcheck disable=SC2086
+            apt-get install -y $PKGS ;;
+        arch)
+            pacman -S --needed --noconfirm rsync efibootmgr dosfstools grub os-prober ;;
+        fedora)
+            PKGS="rsync efibootmgr dosfstools"
+            [ "$ARCH" = "x86_64" ] && PKGS="$PKGS grub2-pc-modules grub2-efi-x64-modules"
+            # shellcheck disable=SC2086
+            dnf install -y $PKGS ;;
+        opensuse)
+            PKGS="rsync efibootmgr dosfstools"
+            [ "$ARCH" = "x86_64" ] && PKGS="$PKGS grub2-i386-pc grub2-x86_64-efi"
+            # shellcheck disable=SC2086
+            zypper --non-interactive --no-refresh install --no-recommends $PKGS ;;
+        gentoo)
+            emerge --noreplace --ask=n net-misc/rsync sys-boot/grub sys-boot/efibootmgr sys-fs/dosfstools ;;
+    esac
+}
+
+# The app and the installer shortcut ask for the password through pkexec (polkit)
+install_pkexec() {
+    command -v pkexec >/dev/null 2>&1 && return 0
+    say "Installing pkexec (polkit), used to ask for the administrator password"
+    case "$FAMILY" in
+        debian)   apt-get install -y pkexec || apt-get install -y policykit-1 ;;
+        arch)     pacman -S --needed --noconfirm polkit ;;
+        fedora)   dnf install -y polkit ;;
+        opensuse) zypper --non-interactive --no-refresh install --no-recommends polkit ;;
+        alpine)   apk add polkit ;;
+        gentoo)   emerge --noreplace --ask=n sys-auth/polkit ;;
+    esac || true
+    command -v pkexec >/dev/null 2>&1 || say "pkexec could not be installed - the app's root tasks and the Install shortcut need it"
+}
+
+# Called through as_root: $1 family, $2 installer (1/0), $3 alpine tools (1/0), $4 gui (1/0)
+root_phase() {
+    detect_family
+    [ "$1" = "$FAMILY" ] || die "the distro detected as root differs ($DISTRO_NAME)"
+    install_host_tools
+    install_squashfs_tools
+    install_erofs_utils
+    install_bootloaders
+    install_pkexec
+    if [ "$4" = 1 ]; then install_gui_deps; fi
+    if [ "$FAMILY" = alpine ]; then
+        if [ "$3" = 1 ]; then install_alpine_installer_tools; fi
+    elif [ "$2" = 1 ]; then
+        install_installer_runtime
+        say "Installing ClaudeInstall's build dependencies (installer/build.sh deps)"
+        sh "$INSTALLER/build.sh" deps --clone --gui
+    fi
+}
+
+# =============================================================================
+# ClaudeInstall configuration for the clone (root). Replaces the Calamares setup of the old
+# claudebackup-linux: same module sequence and the same image paths, now for ClaudeInstall.
+# $1 = 1 for btrfs zstd:22 as default, $2 = 1 for an erofs image
+# =============================================================================
+configure_installer() {
+    detect_family
+    CFG=/etc/claudeinstall
+    MOD=$CFG/modules
+    SHARE=/usr/share/claudeinstall
+    BTRFS="$1"
+    SOURCEFS=squashfs
+    [ "$2" = "1" ] && SOURCEFS=erofs
+    command -v claudeinstall >/dev/null 2>&1 || die "claudeinstall is not installed"
+
+    # Where the family's live initramfs leaves the image during the live session
+    case "$FAMILY" in
+        arch)   UNPACK=/run/arch/bootmnt/LiveOS/rootfs.img ;;        # claudemods mkinitcpio hooks
+        debian) UNPACK=/run/live/medium/live/filesystem.squashfs ;;  # live-boot
+        *)      UNPACK=/run/initramfs/live/LiveOS/squashfs.img ;;    # dracut dmsquash-live
+    esac
+    case "$FAMILY" in
+        arch)            GRUB=grub;  INITRAMFS="initcpiocfg initcpio" ;;
+        debian)          GRUB=grub;  INITRAMFS=initramfs ;;
+        fedora|opensuse) GRUB=grub2; INITRAMFS=dracut ;;
+        gentoo)          GRUB=grub;  INITRAMFS=dracut ;;
+    esac
+
+    if [ -f "$CFG/settings.conf" ] && [ ! -f "$CFG/.claudebackup" ] && [ ! -d "$CFG.orig" ]; then
+        say "Keeping the previous ClaudeInstall config in $CFG.orig"
+        cp -a "$CFG" "$CFG.orig"
+    fi
+    mkdir -p "$MOD" "$CFG/scripts"
+    rm -f "$MOD/unpackfs-clone.conf"
+    : > "$CFG/.claudebackup"
+
+    SYSTEMD=0
+    [ -d /run/systemd/system ] && SYSTEMD=1
+
+    # --- settings.conf -------------------------------------------------------
+    EXEC="partition mount unpackfs"
+    [ "$SYSTEMD" = 1 ] && EXEC="$EXEC machineid"
+    EXEC="$EXEC fstab locale keyboard localecfg shellprocess@cblkernel $INITRAMFS grubcfg bootloader"
+    # Fedora: after the boot loader, fix what the clone carries over from the old system (boot entries)
+    [ "$FAMILY" = fedora ] && EXEC="$EXEC shellprocess@cblfedora"
+    [ -f "$MOD/preservefiles.conf" ] && EXEC="$EXEC preservefiles"
+    EXEC="$EXEC umount"
+    {
+        echo "# Written by Claude Codex Compendium build.sh: install the CLONE from the live ISO."
+        echo "# No users page - the clone keeps its accounts. Rerun build.sh to regenerate."
+        echo "---"
+        echo "modules-search: [ local ]"
+        echo "instances:"
+        echo "- id: cblkernel"
+        echo "  module: shellprocess"
+        echo "  config: shellprocess_cblkernel.conf"
+        if [ "$FAMILY" = fedora ]; then
+            echo "- id: cblfedora"
+            echo "  module: shellprocess"
+            echo "  config: shellprocess_cblfedora.conf"
+        fi
+        echo "sequence:"
+        echo "- show:"
+        for m in welcome locale keyboard partition summary; do echo "  - $m"; done
+        echo "- exec:"
+        for m in $EXEC; do echo "  - $m"; done
+        echo "- show:"
+        echo "  - finished"
+        echo "branding: default"
+        echo "prompt-install: true"
+        echo "dont-chroot: false"
+        echo "oem-setup: false"
+        echo "disable-cancel: false"
+        echo "disable-cancel-during-exec: true"
+        echo "hide-back-and-next-during-exec: true"
+        echo "quit-at-end: false"
+    } > "$CFG/settings.conf"
+
+    # --- module configs ------------------------------------------------------
+    FSTYPE=ext4
+    [ "$BTRFS" = 1 ] && FSTYPE=btrfs
+
+    cat > "$MOD/unpackfs.conf" << EOF
+---
+unpack:
+    - source: "$UNPACK"
+      sourcefs: "$SOURCEFS"
+      destination: ""
+EOF
+
+    cat > "$MOD/partition.conf" << EOF
+---
+efiSystemPartition: "/boot/efi"
+userSwapChoices:
+    - none
+    - small
+    - file
+alwaysShowPartitionLabels: true
+initialPartitioningChoice: erase
+initialSwapChoice: none
+defaultFileSystemType: "$FSTYPE"
+availableFileSystemTypes: ["ext4","btrfs","xfs"]
+EOF
+
+    # btrfs subvolumes and mount options from the claudemods preset; compress=zstd:22 only for btrfs
+    for m in "$SHARE/presets/claudemods/modules/mount.conf" "$INSTALLER/config/claudemods/modules/mount.conf"; do
+        if [ -f "$m" ]; then cp -f "$m" "$MOD/mount.conf"; break; fi
+    done
+    [ -f "$MOD/mount.conf" ] || die "mount.conf of the claudemods preset not found"
+    if [ "$BTRFS" != 1 ]; then sed -i 's/, compress=zstd:22//' "$MOD/mount.conf"; fi
+
+    cat > "$MOD/fstab.conf" << EOF
+---
+crypttabOptions: luks
+tmpOptions:
+    default:
+        tmpfs: false
+        options: ""
+    ssd:
+        tmpfs: false
+        options: ""
+EOF
+
+    cat > "$MOD/bootloader.conf" << EOF
+---
+efiBootLoader: "grub"
+kernelSearchPath: "/usr/lib/modules"
+kernelPattern: "^vmlinuz.*"
+grubInstall: "$GRUB-install"
+grubMkconfig: "$GRUB-mkconfig"
+grubCfg: "/boot/$GRUB/grub.cfg"
+grubProbe: "$GRUB-probe"
+efiBootMgr: "efibootmgr"
+efiBootloaderId: "$DISTRO_ID"
+installEFIFallback: true
+installHybridGRUB: false
+EOF
+
+    printf '%s\n' '---' 'overwrite: false' 'keepDistributor: true' > "$MOD/grubcfg.conf"
+    case "$FAMILY" in
+        arch)
+            # initcpio preset = the live kernel's package (linux-cachyos, linux, linux-zen, ...). Inside a
+            # container (CCCU) uname -r is the HOST's kernel: CBL_KERNEL names the container's own.
+            KREL="${CBL_KERNEL:-$(uname -r)}"
+            PKGBASE=$(cat "/usr/lib/modules/$KREL/pkgbase" 2>/dev/null || echo linux)
+            printf '%s\n' '---' "kernel: $PKGBASE" 'be_unsafe: false' > "$MOD/initcpio.conf" ;;
+        debian)
+            printf '%s\n' '---' 'kernel: "all"' 'be_unsafe: false' > "$MOD/initramfs.conf" ;;
+        *)
+            printf '%s\n' '---' 'options: [ "-f" ]' > "$MOD/dracut.conf" ;;
+    esac
+    printf '%s\n' '---' 'systemd: true' 'dbus: true' 'dbus-symlink: true' > "$MOD/machineid.conf"
+
+    # The image is a bind of "/", so a separate /boot (vfat ESP as /boot, Gentoo, Fedora) is empty
+    # in the clone: give the installed system a kernel before the initramfs step. Runs on the live
+    # system (dontChroot); ClaudeInstall passes its target root as ${ROOT}.
+    cat > "$CFG/scripts/cbl-kernel.sh" << 'EOF'
+#!/bin/sh
+R="${1:-}"
+[ -n "$R" ] || R=$(awk '$2 ~ /^\/tmp\/(claudeinstall|calamares)-root-[^\/]*$/ {print $2}' /proc/mounts | head -n 1)
+[ -d "$R" ] || { echo "cbl-kernel: target root not found"; exit 1; }
+KV=$(uname -r)
+if ls "$R"/boot/vmlinuz-* "$R"/boot/kernel-* >/dev/null 2>&1; then
+    exit 0
+fi
+# Arch: mkinitcpio presets expect /boot/vmlinuz-<pkgbase> (vmlinuz-linux, vmlinuz-linux-cachyos)
+NAME="vmlinuz-$KV"
+[ -f "$R/usr/lib/modules/$KV/pkgbase" ] && NAME="vmlinuz-$(cat "$R/usr/lib/modules/$KV/pkgbase")"
+mkdir -p "$R/boot"
+for k in "$R/usr/lib/modules/$KV/vmlinuz" "$R/lib/modules/$KV/vmlinuz" \
+         /run/live/medium/live/vmlinuz /run/initramfs/live/live/vmlinuz /run/arch/bootmnt/boot/vmlinuz-x86_64; do
+    if [ -f "$k" ]; then
+        cp "$k" "$R/boot/$NAME"
+        echo "cbl-kernel: /boot was empty, installed $k as /boot/$NAME"
+        break
+    fi
+done
+[ -f "$R/boot/$NAME" ] || { echo "cbl-kernel: no kernel found for $KV"; exit 1; }
+# Fedora's GRUB boots BLS entries: create the entry for the copied kernel
+if [ "@FAMILY@" = fedora ] && [ -x "$R/usr/bin/kernel-install" ]; then
+    chroot "$R" kernel-install add "$KV" "/boot/$NAME" || true
+fi
+exit 0
+EOF
+    sed -i "s/@FAMILY@/$FAMILY/" "$CFG/scripts/cbl-kernel.sh"
+    chmod 755 "$CFG/scripts/cbl-kernel.sh"
+    printf '%s\n' '---' 'dontChroot: true' 'timeout: 600' 'script:' '    - "/etc/claudeinstall/scripts/cbl-kernel.sh ${ROOT}"' \
+        > "$MOD/shellprocess_cblkernel.conf"
+
+    if [ "$FAMILY" = fedora ]; then
+        # The clone's boot entries, /etc/kernel/cmdline and /etc/default/grub still name the OLD
+        # system's root (UUID, btrfs subvolume, live options): the installed system then hangs
+        # after Plymouth. Rewrite them for the new disk, rebuild the initramfs and boot entries,
+        # and let SELinux relabel the copied files.
+        cat > "$CFG/scripts/cbl-fedora.sh" << 'EOF'
+#!/bin/sh
+R="${1:-}"
+[ -n "$R" ] || R=$(awk '$2 ~ /^\/tmp\/(claudeinstall|calamares)-root-[^\/]*$/ {print $2}' /proc/mounts | head -n 1)
+[ -d "$R" ] || { echo "cbl-fedora: target root not found"; exit 1; }
+chroot "$R" /bin/sh -s << 'CHROOT'
+ROOT_UUID=$(findmnt -no UUID / 2>/dev/null)
+FSTYPE=$(findmnt -no FSTYPE / 2>/dev/null)
+FSROOT=$(findmnt -no FSROOT / 2>/dev/null | sed 's/\[.*//')
+[ -n "$ROOT_UUID" ] || { echo "cbl-fedora: root UUID not found, leaving the boot entries alone"; exit 0; }
+ARGS="root=UUID=$ROOT_UUID ro"
+if [ "$FSTYPE" = btrfs ] && [ -n "$FSROOT" ] && [ "$FSROOT" != "/" ]; then
+    ARGS="$ARGS rootflags=subvol=${FSROOT#/}"
+fi
+echo "cbl-fedora: kernel command line: $ARGS rhgb quiet"
+mkdir -p /etc/kernel
+echo "$ARGS rhgb quiet" > /etc/kernel/cmdline
+if [ -f /etc/default/grub ]; then
+    sed -i -E '/^GRUB_CMDLINE_LINUX=/{
+        s/(^|[ "])(root|rootflags|resume|rd\.lvm\.lv|rd\.luks\.[a-z.]+|rd\.live\.[a-z.]+|rd\.md\.uuid)=[^ "]*/\1/g
+        s/[[:space:]]+rd\.live\.image//g
+        s/[[:space:]]+(root=live:[^ "]*)//g
+        s/[[:space:]]+/ /g
+    }' /etc/default/grub
+fi
+BOOT_UUID=$(findmnt -no UUID /boot 2>/dev/null)
+[ -n "$BOOT_UUID" ] || BOOT_UUID="$ROOT_UUID"
+for stub in /boot/efi/EFI/fedora/grub.cfg; do
+    [ -f "$stub" ] && sed -i -E "s/(--fs-uuid[[:space:]]+--set=[a-z]+[[:space:]]+)[^ ]+/\1$BOOT_UUID/" "$stub"
+done
+rm -f /boot/loader/entries/*.conf
+for d in /usr/lib/modules/*/; do
+    KV=$(basename "$d")
+    IMG="$d/vmlinuz"
+    [ -f "$IMG" ] || IMG="/boot/vmlinuz-$KV"
+    [ -f "$IMG" ] || continue
+    kernel-install add "$KV" "$IMG" || dracut -f --kver "$KV" "/boot/initramfs-$KV.img" || true
+done
+[ -x /usr/sbin/grub2-mkconfig ] && grub2-mkconfig -o /boot/grub2/grub.cfg 2>&1 | tail -n 3
+systemctl set-default graphical.target 2>/dev/null || ln -sf /usr/lib/systemd/system/graphical.target /etc/systemd/system/default.target
+touch /.autorelabel
+exit 0
+CHROOT
+EOF
+        chmod 755 "$CFG/scripts/cbl-fedora.sh"
+        printf '%s\n' '---' 'dontChroot: true' 'timeout: 900' 'script:' '    - "/etc/claudeinstall/scripts/cbl-fedora.sh ${ROOT}"' \
+            > "$MOD/shellprocess_cblfedora.conf"
+    fi
+
+    REBOOT="reboot"
+    [ "$SYSTEMD" = 1 ] && REBOOT="systemctl -i reboot"
+    printf '%s\n' '---' 'restartNowEnabled: true' 'restartNowChecked: false' "restartNowCommand: \"$REBOOT\"" \
+        > "$MOD/finished.conf"
+
+    cat > "$MOD/welcome.conf" << EOF
+---
+showSupportUrl: false
+showKnownIssuesUrl: false
+showReleaseNotesUrl: false
+requirements:
+    requiredStorage: 10
+    requiredRam: 1.0
+    check:
+        - storage
+        - ram
+        - root
+    required:
+        - storage
+        - root
+EOF
+
+    # The claudemods sidebar colours (claudeinstall-colors comes with ClaudeInstall)
+    if command -v claudeinstall-colors >/dev/null 2>&1; then claudeinstall-colors claudemods >/dev/null 2>&1 || true; fi
+
+    install_installer_launcher
+    say "ClaudeInstall configured for $DISTRO_NAME (unpacks $UNPACK as $SOURCEFS, $FSTYPE default, $GRUB)"
+}
+
+# Starts ClaudeInstall as root from the live desktop through pkexec, keeping the session's display
+# (pkexec drops it, and ClaudeInstall is a GUI). The root helper first matches the unpack settings
+# to the ISO's real image (squashfs / erofs) and loads its kernel module.
+install_installer_launcher() {
+    mkdir -p /usr/local/lib/claudebackup
+    cat > /usr/local/lib/claudebackup/install-root.sh << 'EOF'
+#!/bin/sh
+for conf in /etc/claudeinstall/modules/unpackfs.conf; do
+    [ -f "$conf" ] || continue
+    SRC=$(sed -n 's/^[[:space:]]*-[[:space:]]*source:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p' "$conf" | head -n 1)
+    [ -f "$SRC" ] || continue
+    TYPE=$(blkid -p -o value -s TYPE "$SRC" 2>/dev/null || true)
+    case "$TYPE" in
+        squashfs|erofs)
+            echo "claudebackup: $SRC is $TYPE"
+            sed -i -E "s#^([[:space:]]*sourcefs:[[:space:]]*).*#\1\"$TYPE\"#" "$conf"
+            modprobe "$TYPE" 2>/dev/null || true ;;
+    esac
+done
+exec claudeinstall -D 6 "$@"
+EOF
+    chmod 755 /usr/local/lib/claudebackup/install-root.sh
+
+    cat > /usr/local/bin/claudebackup-install << 'EOF'
+#!/bin/sh
+# Opens ClaudeInstall as root (the "Install ..." desktop shortcut of the claudebackup live ISO).
+# Everything goes to a log, and if it does not start a message window says why, so a desktop
+# click never fails silently.
+LOG="/tmp/claudebackup-install-$(id -u).log"
+echo "=== $(date): starting ClaudeInstall (user $(id -un), session ${XDG_SESSION_TYPE:-?})" >> "$LOG"
+ROOT_HELPER=/usr/local/lib/claudebackup/install-root.sh
+if [ "$(id -u)" -eq 0 ]; then
+    "$ROOT_HELPER" "$@" >> "$LOG" 2>&1
+elif command -v pkexec >/dev/null 2>&1; then
+    pkexec env DISPLAY="$DISPLAY" XAUTHORITY="$XAUTHORITY" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+        XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" XDG_SESSION_TYPE="$XDG_SESSION_TYPE" \
+        "$ROOT_HELPER" "$@" >> "$LOG" 2>&1
+else
+    echo "pkexec is not installed" >> "$LOG"
+    false
+fi
+RC=$?
+echo "=== exit code $RC" >> "$LOG"
+if [ "$RC" -ne 0 ]; then
+    case "$RC" in
+        126) MSG="ClaudeInstall was not started: the password prompt was cancelled or refused." ;;
+        127) MSG="ClaudeInstall was not started: a program was not found (claudeinstall or pkexec)." ;;
+        *)   MSG="ClaudeInstall stopped with an error (exit code $RC)." ;;
+    esac
+    MSG="$MSG
+Details: $LOG"
+    kdialog --error "$MSG" 2>/dev/null ||
+        zenity --error --text="$MSG" 2>/dev/null ||
+        notify-send "Install" "$MSG" 2>/dev/null ||
+        xmessage "$MSG" 2>/dev/null || true
+fi
+exit "$RC"
+EOF
+    chmod 755 /usr/local/bin/claudebackup-install
+    # the old Calamares launcher of claudebackup-linux, if it is still there
+    rm -f /usr/local/bin/claudebackup-calamares /usr/local/lib/claudebackup/calamares-root.sh
+}
+
+# ---- Desktop shortcut ------------------------------------------------------
+# "Install <distro>" on the Desktop: part of the clone, so the live ISO's desktop has it.
+add_desktop_shortcut() {
+    if [ "$FAMILY" = alpine ]; then
+        COMMENT="Install this cloned system to a disk ($TARGET alpine)"
+        ICON=drive-harddisk
+        if command -v konsole >/dev/null 2>&1; then EXEC="konsole --hold -e $TARGET alpine"; IN_TERMINAL=false
+        else EXEC="$TARGET alpine"; IN_TERMINAL=true; fi
+    else
+        COMMENT="Install this cloned system to a disk (ClaudeInstall)"
+        ICON=claudeinstall
+        EXEC=/usr/local/bin/claudebackup-install
+        IN_TERMINAL=false
+    fi
+
+    ENTRY="[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Install $DISTRO_NAME
+Comment=$COMMENT
+Exec=$EXEC
+Icon=$ICON
+Terminal=$IN_TERMINAL
+Categories=System;"
+
+    HOMES=""
+    if [ -n "$DESK_USER" ] || [ "$(id -u)" -ne 0 ]; then
+        HOMES="$DESK_HOME"
+    else
+        HOMES=$(awk -F: '$3 >= 1000 && $3 < 60000 && $6 != "" && $7 !~ /(nologin|false)$/ { print $6 }' /etc/passwd)
+        [ -n "$HOMES" ] || HOMES="$DESK_HOME"
+    fi
+    for H in $HOMES /etc/skel; do
+        [ -d "$H" ] || continue
+        DIR=""
+        if [ "$H" != /etc/skel ] && command -v xdg-user-dir >/dev/null 2>&1; then DIR=$(HOME="$H" xdg-user-dir DESKTOP 2>/dev/null || true); fi
+        if [ -z "$DIR" ] || [ "$DIR" = "$H" ]; then DIR="$H/Desktop"; fi
+        OWNER=$(stat -c %U "$H" 2>/dev/null || true)
+        as_root mkdir -p "$DIR"
+        # the old claudebackup-linux shortcut opened Calamares
+        as_root rm -f "$DIR/claudebackup-install.desktop"
+        FILE="$DIR/claudebackup-install.desktop"
+        printf '%s\n' "$ENTRY" | as_root tee "$FILE" >/dev/null
+        as_root chmod 755 "$FILE"
+        if command -v gio >/dev/null 2>&1; then gio set "$FILE" metadata::trusted true 2>/dev/null || true; fi
+        if [ -n "$OWNER" ] && [ "$H" != /etc/skel ]; then as_root chown "$OWNER" "$DIR" "$FILE" 2>/dev/null || true; fi
+        say "Added 'Install $DISTRO_NAME' to $DIR"
+    done
+    printf '%s\n' "$ENTRY" | as_root tee /usr/share/applications/claudebackup-install.desktop >/dev/null
+    as_root chmod 644 /usr/share/applications/claudebackup-install.desktop
+}
+
+# CCCU (cccu iso), as root INSIDE an Incus container after --root-phase: builds and installs
+# ClaudeInstall there, configures it for the clone and adds the Install shortcut, so the live ISO
+# made from the container can install itself. $1 = 1 for btrfs zstd:22, $2 = 1 for an erofs image
+container_installer() {
+    detect_family
+    [ "$FAMILY" != alpine ] || die "Alpine uses the cloner's own installer, not ClaudeInstall"
+    say "Building ClaudeInstall inside the container (installer/, clone mode)"
+    sh "$INSTALLER/build.sh" install --clone --gui --no-deps || die "ClaudeInstall did not build (see $INSTALLER/build/errors.log)"
+    configure_installer "$1" "$2"
+    DESK_USER=""
+    DESK_HOME=/root
+    add_desktop_shortcut
+}
+
+case "${1:-}" in
+    --root-phase)          shift; root_phase "$@"; exit 0 ;;
+    --configure-installer) shift; configure_installer "$@"; exit 0 ;;
+    --container-installer) shift; container_installer "$@"; exit 0 ;;
+    help|-h|--help)        sed -n '2,/^set -e/p' "$SELF" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
+esac
+
+# =============================================================================
+# User phase: questions, root phase, build, install, launch
+# =============================================================================
+ASSUME_YES=0; WANT_INSTALLER=""; WANT_GUI=1; WANT_BTRFS=""; WANT_EROFS=0; LAUNCH=1; WANT_CCCU=1
+for a in "$@"; do
+    case "$a" in
+        --yes|-y)       ASSUME_YES=1 ;;
+        --no-installer) WANT_INSTALLER=0 ;;
+        --installer)    WANT_INSTALLER=1 ;;
+        --no-gui)       WANT_GUI=0 ;;
+        --btrfs)        WANT_BTRFS=1 ;;
+        --ext4)         WANT_BTRFS=0 ;;
+        --erofs)        WANT_EROFS=1 ;;
+        --no-launch)    LAUNCH=0 ;;
+        --no-cccu)      WANT_CCCU=0 ;;
+        *) die "unknown option: $a (see ./build.sh help)" ;;
+    esac
+done
+
+for d in "$CLONER/Makefile" "$GUI_SRC/CMakeLists.txt" "$INSTALLER/build.sh"; do
+    [ -f "$d" ] || die "$d not found - keep build.sh in the claude-codex-compendium folder"
+done
+[ "$(uname -s)" = "Linux" ] || die "this project only builds on Linux"
+detect_family
+say "Detected $DISTRO_NAME"
+
+# yes/no question; $2 is the default (y/n); --yes or no terminal = the default
+ask() {
+    if [ "$ASSUME_YES" = 1 ] || [ ! -t 0 ]; then [ "$2" = y ]; return; fi
+    printf '\033[1;92m%s\033[0;32m ' "$1"
+    read -r reply
+    reply=$(printf '%s' "${reply:-$2}" | tr '[:upper:]' '[:lower:]')
+    [ "$reply" = y ] || [ "$reply" = yes ]
+}
+# choice of 1/2; prints 1 or 2 (default 1)
+choose() {
+    if [ "$ASSUME_YES" = 1 ] || [ ! -t 0 ]; then echo 1; return; fi
+    printf '\033[1;92m%s\033[0;32m ' "$1" >&2
+    read -r reply
+    [ "$reply" = 2 ] && echo 2 || echo 1
+}
+
+INSTALLER_ON=0; BTRFS=0; ALPINE_TOOLS=0
+
+choose_image_format
+
+if [ "$FAMILY" = alpine ]; then
+    say "Alpine: the live ISO uses the cloner's own 'Install Cloned System To Disk' (not ClaudeInstall)"
+    if ask "Install the Alpine installer tools (sfdisk, mkfs, GRUB) so the ISO can install itself? [Y/n]" y; then
+        ALPINE_TOOLS=1
+    fi
+elif [ "$WANT_INSTALLER" = 1 ] || { [ "$WANT_INSTALLER" != 0 ] && ask "Build ClaudeInstall, so the live ISO can install itself to a disk? [Y/n]" y; }; then
+    INSTALLER_ON=1
+    if [ "$FAMILY" = fedora ]; then
+        say "Fedora: ClaudeInstall replaces Anaconda - Anaconda's installer shortcuts are left out of the ISO"
+    fi
+    if [ -n "$WANT_BTRFS" ]; then
+        BTRFS="$WANT_BTRFS"
+    else
+        echo "ClaudeInstall default filesystem for the installed system:"
+        echo "  1) Ext4 (default)"
+        echo "  2) Btrfs with level 22 compression (zstd:22)"
+        [ "$(choose "Enter your choice (1 or 2):")" = 2 ] && BTRFS=1
+    fi
+fi
+if [ "$WANT_GUI" = 1 ] && ! ask "Build the Qt6 app (claudebackup-linux-qt6)? [Y/n]" y; then WANT_GUI=0; fi
+# CCCU supports the families with systemd and an Incus package
+case "$FAMILY" in
+    arch|debian|fedora|opensuse) ;;
+    *) [ "$WANT_CCCU" = 1 ] && say "CCCU (containers) does not support $DISTRO_NAME - skipping it"; WANT_CCCU=0 ;;
+esac
+if [ "$WANT_CCCU" = 1 ] && ! ask "Build CCCU, to clone this system into Incus containers? [Y/n]" y; then WANT_CCCU=0; fi
+
+# The user whose Desktop gets the shortcut (also when build.sh itself was started through sudo/doas)
+DESK_USER=""
+DESK_HOME="$HOME"
+if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-${DOAS_USER:-}}" ]; then
+    DESK_USER="${SUDO_USER:-$DOAS_USER}"
+    DESK_HOME=$(awk -F: -v u="$DESK_USER" '$1 == u { print $6 }' /etc/passwd)
+    [ -n "$DESK_HOME" ] || DESK_HOME="/home/$DESK_USER"
+fi
+
+say "Installing packages as root"
+as_root sh "$SELF" --root-phase "$FAMILY" "$INSTALLER_ON" "$ALPINE_TOOLS" "$WANT_GUI"
+
+finalize_image_format
+
+# ---- 1. the cloner ----------------------------------------------------------
+say "Building the cloner (cloner/)"
+make -C "$CLONER" -j"$(nproc 2>/dev/null || echo 1)"
+say "Installing $TARGET"
+as_root make -C "$CLONER" install
+command -v "$TARGET" >/dev/null 2>&1 || die "$TARGET is not on PATH after install"
+
+# ---- 2. the Qt6 app ---------------------------------------------------------
+GUI_OK=0
+if [ "$WANT_GUI" = 1 ]; then
+    say "Building the Qt6 app (cloner-qt6/)"
+    GEN=""
+    if command -v ninja >/dev/null 2>&1 || command -v samu >/dev/null 2>&1; then GEN="-G Ninja"; fi
+    # shellcheck disable=SC2086
+    if cmake -S "$GUI_SRC" -B "$GUI_BUILD" $GEN -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr &&
+       cmake --build "$GUI_BUILD" -j "$(nproc 2>/dev/null || echo 1)"; then
+        say "Installing $GUI_TARGET"
+        as_root cmake --install "$GUI_BUILD"
+        GUI_OK=1
+    else
+        say "The Qt6 app did not build - the terminal menu ($TARGET) still works. See the messages above."
+    fi
+fi
+
+# ---- 3. ClaudeInstall -------------------------------------------------------
+if [ "$INSTALLER_ON" = 1 ]; then
+    say "Building ClaudeInstall (installer/, clone mode, Qt6 GUI)"
+    if sh "$INSTALLER/build.sh" build --clone --gui --no-deps; then
+        say "Installing ClaudeInstall"
+        if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+            sh "$INSTALLER/build.sh" install --clone --gui --no-deps          # it uses sudo itself
+        else
+            as_root sh "$INSTALLER/build.sh" install --clone --gui --no-deps
+            if [ "$(id -u)" -ne 0 ]; then as_root chown -R "$(id -u):$(id -g)" "$INSTALLER/build" 2>/dev/null || true; fi
+        fi
+        say "Configuring ClaudeInstall to install the clone"
+        as_root sh "$SELF" --configure-installer "$BTRFS" "$EROFS"
+    else
+        INSTALLER_ON=0
+        say "ClaudeInstall did not build (errors: $INSTALLER/build/errors.log). The cloner and the app are installed;"
+        say "fix the errors and run ./build.sh again - the live ISO has no installer until then."
+    fi
+fi
+
+# ---- 4. CCCU ----------------------------------------------------------------
+# cccu/build.sh installs its own dependencies (GCC 14+, CMake 3.25+, Qt6) and installs cccu + cccu-gui.
+# Its ISO engine is the cloner's (cloner/src) and its ISOs carry ClaudeInstall (built in the container).
+CCCU_OK=0
+if [ "$WANT_CCCU" = 1 ]; then
+    say "Building CCCU (cccu/, the container creator)"
+    command -v bash >/dev/null 2>&1 || die "CCCU's build script needs bash"
+    CCCU_ARGS=""
+    [ "$WANT_GUI" = 1 ] || CCCU_ARGS="--no-gui"
+    # shellcheck disable=SC2086
+    if [ "$(id -u)" -eq 0 ] || command -v sudo >/dev/null 2>&1; then
+        bash "$CCCU_SRC/build.sh" $CCCU_ARGS && CCCU_OK=1          # it uses sudo itself
+    else
+        as_root bash "$CCCU_SRC/build.sh" $CCCU_ARGS && CCCU_OK=1
+        as_root chown -R "$(id -u):$(id -g)" "$CCCU_SRC/build" "$CCCU_SRC/resources" 2>/dev/null || true
+    fi
+    [ "$CCCU_OK" = 1 ] || say "CCCU did not build (it needs GCC 14+ and CMake 3.25+, see above). Everything else is installed."
+fi
+
+if [ "$INSTALLER_ON" = 1 ] || [ "$ALPINE_TOOLS" = 1 ]; then add_desktop_shortcut; fi
+
+say "Done."
+say "  Terminal menu:  $TARGET"
+[ "$GUI_OK" = 1 ] && say "  Qt6 app:        $GUI_TARGET (also in the applications menu as 'claudebackup linux')"
+[ "$INSTALLER_ON" = 1 ] && say "  Installer:      claudebackup-install (ClaudeInstall, from the live ISO)"
+[ "$CCCU_OK" = 1 ] && say "  Containers:     sudo cccu  /  cccu-gui (CCCU in the applications menu)"
+printf '\033[0m'
+
+[ "$LAUNCH" = 1 ] || exit 0
+if [ "$GUI_OK" = 1 ] && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && [ "$(id -u)" -ne 0 ]; then
+    say "Launching $GUI_TARGET"
+    printf '\033[0m'
+    nohup "$GUI_TARGET" >/dev/null 2>&1 &
+else
+    say "Launching $TARGET"
+    printf '\033[0m'
+    exec "$TARGET"
+fi

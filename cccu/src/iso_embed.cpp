@@ -1,0 +1,32 @@
+#include "iso_embed.hpp"
+
+// The files are put into the binary by the assembler (.incbin), like the claudebackup engine does for its Arch
+// boot tree. CMake passes their absolute paths.
+#define CCCU_EMBED(sym, file)               \
+    ".section .rodata\n"                    \
+    ".global " sym "_start\n"               \
+    ".balign 16\n"                          \
+    sym "_start:\n"                         \
+    ".incbin \"" file "\"\n"                \
+    ".global " sym "_end\n"                 \
+    sym "_end:\n"                           \
+    ".byte 0\n"                             \
+    ".previous\n"
+
+asm(CCCU_EMBED("cccu_embed_engine", CCCU_ENGINE_BIN));
+asm(CCCU_EMBED("cccu_embed_provision", CCCU_PROVISION_TGZ));
+asm(CCCU_EMBED("cccu_embed_bootloaders", CCCU_BOOTLOADERS_TGZ));
+
+extern "C" {
+extern const char cccu_embed_bootloaders_start[], cccu_embed_bootloaders_end[];
+extern const char cccu_embed_engine_start[], cccu_embed_engine_end[];
+extern const char cccu_embed_provision_start[], cccu_embed_provision_end[];
+}
+
+namespace cccu::iso_embed {
+
+Blob engine() { return {cccu_embed_engine_start, cccu_embed_engine_end}; }
+Blob provision() { return {cccu_embed_provision_start, cccu_embed_provision_end}; }
+Blob bootloaders() { return {cccu_embed_bootloaders_start, cccu_embed_bootloaders_end}; }
+
+}  // namespace cccu::iso_embed
