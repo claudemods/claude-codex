@@ -16,8 +16,8 @@ $(TARGET): src/main.cpp $(HDRS) $(ZIPS) version.txt
 
 install: $(TARGET)
 	install -Dm755 $(TARGET) $(DESTDIR)$(PREFIX)/bin/$(TARGET)
-	install -d $(DESTDIR)/etc/$(TARGET)
-	install -Dm644 config/custom.exclude.list $(DESTDIR)/etc/$(TARGET)/custom.exclude.list
+	install -d $(DESTDIR)/etc/claudecodexbackup
+	install -Dm644 config/custom.exclude.list $(DESTDIR)/etc/claudecodexbackup/custom.exclude.list
 	# pkexec rule for Claude Codex Cloner's Backup tab: one password prompt, then kept for a few minutes
 	install -Dm644 config/org.claudemods.claudebackup.policy $(DESTDIR)$(PREFIX)/share/polkit-1/actions/org.claudemods.claudebackup.policy
 	# Claude Codex Backup's icon (menu entry, window, the Alpine "Install" shortcut)

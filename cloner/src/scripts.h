@@ -254,7 +254,7 @@ OWN_MEDIUM=""
 if [ ! -d "$LIVE_ROOT/etc" ] && [ ! -f "$LIVE_SQ" ]; then
     # The live boot did not leave its mounts where expected: find the ISO by its label
     MEDIUM=$(findfs "LABEL=@@LIVE_LABEL@@" 2>/dev/null || blkid -L "@@LIVE_LABEL@@" 2>/dev/null || true)
-    [ -n "$MEDIUM" ] || fail "the cloned system was not found - run this from the claudebackup live ISO."
+    [ -n "$MEDIUM" ] || fail "the cloned system was not found - run this from the Claude Codex Backup live ISO."
     OWN_MEDIUM=/mnt/ccb-medium
     mkdir -p "$OWN_MEDIUM"
     mount -o ro "$MEDIUM" "$OWN_MEDIUM" || fail "cannot mount the live medium $MEDIUM."

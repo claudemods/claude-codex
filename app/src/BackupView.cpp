@@ -823,7 +823,7 @@ BackupView::makeSettingsPage()
     auto* page = new QWidget;
     auto* l = new QVBoxLayout( page );
     l->setSpacing( 14 );
-    l->addWidget( pageHeader( tr( "Settings" ), tr( "Saved in ~/.config/claudebackup-linux/configuration.txt - the terminal menu uses the same file." ) ) );
+    l->addWidget( pageHeader( tr( "Settings" ), tr( "Saved in ~/.config/claudecodexbackup/configuration.txt - the terminal menu uses the same file." ) ) );
 
     auto* c = card();
     auto* cl = new QVBoxLayout( c );
@@ -885,7 +885,7 @@ BackupView::makeSettingsPage()
     };
 
     m_isoName = new QLineEdit;
-    m_isoName->setPlaceholderText( tr( "automatic: claudebackup-<distro>-<date>.iso" ) );
+    m_isoName->setPlaceholderText( tr( "automatic: claudecodexbackup-<distro>-<date>.iso" ) );
     connect( m_isoName, &QLineEdit::textEdited, this, dirty );
     m_form->addRow( tr( "ISO name" ), badged( m_isoName, [ this ]() { return m_isoName->text().trimmed().isEmpty(); } ) );
 

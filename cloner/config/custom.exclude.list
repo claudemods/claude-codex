@@ -1,4 +1,4 @@
-# /etc/claudebackup-linux/custom.exclude.list
+# /etc/claudecodexbackup/custom.exclude.list
 # Nothing is excluded by default: the clone contains everything on the system.
 # Remove the '#' in front of a line to leave that path out of the ISO (paths are relative to /).
 

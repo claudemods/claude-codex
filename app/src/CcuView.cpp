@@ -428,7 +428,7 @@ QWidget* CcuView::buildIsoPage() {
     row->setSpacing(12);
 
     row->addWidget(card("Create a live ISO",
-                        "A bootable live ISO of the container's system, built INSIDE the container with the claudebackup engine "
+                        "A bootable live ISO of the container's system, built INSIDE the container with the Claude Codex Backup engine "
                         "(Arch, Debian, Fedora and openSUSE families). Users, settings and /home are cloned as they are. "
                         "Build ISO sets it up as a service: after the reboot it runs on the console with the progress display, "
                         "then the login screen appears.",
@@ -443,7 +443,7 @@ QWidget* CcuView::buildIsoPage() {
     addRow(Iso, "ISO folder", fileRow(isoOut_, true, QString(), true), {isoOut_}, true, [this] { return !isoOut_->text().trimmed().isEmpty(); });
 
     isoName_ = new QLineEdit;
-    isoName_->setPlaceholderText("automatic: claudebackup-<distro>-<date>.iso");
+    isoName_->setPlaceholderText("automatic: claudecodexbackup-<distro>-<date>.iso");
     addRow(Iso, "ISO name", isoName_, {isoName_}, false, [this] {
         return !isoName_->text().trimmed().isEmpty() && validWord(isoName_->text().trimmed());
     });

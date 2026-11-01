@@ -30,7 +30,7 @@ struct ClonerStatus
     QList< CustomFile > customFiles;
     QList< InstallerFile > installerFiles;
 
-    QString value( const QString& key ) const { return values.value( key ); }
+    QString value( const QString& key, const QString& fallback = QString() ) const { return values.value( key, fallback ); }
     bool flag( const QString& key ) const { return values.value( key ) == QLatin1String( "1" ); }
     QString family() const { return value( QStringLiteral( "family" ) ); }
 };

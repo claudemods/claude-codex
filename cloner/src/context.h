@@ -10,7 +10,7 @@
 struct Context {
     Distro distro;
     Settings settings;
-    std::string workDir;             // e.g. /home/claudebackup
+    std::string workDir;             // e.g. /home/claudecodexbackup
     std::string isoDir;              // workDir/isodir
     std::string liveRoot;            // workDir/liveroot
     std::string isoPath;             // final .iso file

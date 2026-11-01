@@ -109,7 +109,7 @@ Every tool shows **Compendium v1.0 01-11-2026** in its window, banner, About box
 
 The single commands still work, plus the `claude-codex-backup`, `claude-codex-install`,
 `claude-codex-install-tui` and `claude-codex-ccu` links. Internal names (`/etc/claudeinstall`,
-`~/.config/claudebackup-linux`, library and package names) are unchanged, so existing setups keep
+`~/.config/claudecodexbackup`, library and package names) are unchanged, so existing setups keep
 working.
 
 ## Quick start
@@ -190,7 +190,7 @@ Nothing else is running then, so no file changes while the system is copied — 
 On the next boot the one-shot `claude-codex-backup-boot.service` takes the console (VT1) and builds
 the ISO with your saved settings and live progress; the login screen waits for it. On success the
 PC reboots after a 5-second countdown; on failure the error stays 30 seconds, then the login screen
-starts (log: `/var/log/claudebackup-linux.log`). The service switches itself off *before* building
+starts (log: `/var/log/claudecodexbackup.log`). The service switches itself off *before* building
 and its files are left out of the image, so it runs exactly once. Needs systemd (not on Alpine or
 OpenRC Gentoo).
 
@@ -416,14 +416,15 @@ password for a few minutes: `org.claudemods.claudebackup` (the cloner) and
 
 | What | Where |
 |---|---|
-| The cloner (ISO builds, USB writes) | `/var/log/claudebackup-linux.log` |
-| The installer launcher on the live ISO | `/tmp/claudebackup-install-<uid>.log` |
-| Claude Codex Install build errors | `installer/build/errors.log` (also `configure.log`, `build.log`) |
+| **A build.sh run** | `logs/<date-time>/` in the compendium folder (`logs/latest` = the newest): `build.txt` is the whole run as plain text, plus one log per step — `0-packages`, `1-backup`, `2-cloner-window`, `3-install-*`, `4-ccu`, `5-install`. A tool that fails has its errors repeated on the Complete screen |
+| The cloner (ISO builds, USB writes) | `/var/log/claudecodexbackup.log` |
+| The installer launcher on the live ISO | `/tmp/claudecodexbackup-install-<uid>.log` |
+| Claude Codex Install build errors | `logs/latest/3-install-errors.log` (also in `installer/build/`) |
 | CCU | `/var/log/cccu/` (`install.log`, `container.log`, `export.log`, `iso.log`) |
 | A boot-time ISO build | `journalctl -b -u claude-codex-backup-boot` |
 | A CCU desktop session that does not start | `journalctl -b -u sddm`, `~/.local/share/sddm/wayland-session.log`, `incus info <container> --show-log` |
 
-- **A tool shows FAILED on the Complete screen** — open the log it names, install what it reports
+- **A tool shows FAILED on the Complete screen** — its errors are printed right there; the full log it names is in `logs/latest/`. Fix the reported problem (often a missing package), install what it reports
   missing, run `./build.sh` again.
 - **"Not authorised"** — the password dialog was cancelled; polkit (`pkexec`) and a polkit agent
   must be installed.

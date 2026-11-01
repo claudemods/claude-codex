@@ -49,7 +49,7 @@ Commands
 iso options
   --name <container>        the container to build from (default: desktop)
   --iso-out <folder>        host folder that receives the ISO (default: Downloads in your home folder)
-  --iso-name <file>         ISO file name (default: claudebackup-<distro>-<date>.iso)
+  --iso-name <file>         ISO file name (default: claudecodexbackup-<distro>-<date>.iso)
   --iso-level <1-22>        squashfs zstd level (default 3)
   --iso-format squashfs|erofs
   --iso-tag <label>         Arch volume label (default 2026)

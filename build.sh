@@ -152,9 +152,13 @@ choose_image_format() {
     fi
 }
 
-# The cloner reads its settings from ~/.config/claudebackup-linux/configuration.txt
+# The cloner reads its settings from ~/.config/claudecodexbackup/configuration.txt (an older
+# ~/.config/claudebackup-linux is moved there)
 save_image_format() {
-    CFGDIR="$DESK_HOME/.config/claudebackup-linux"
+    CFGDIR="$DESK_HOME/.config/claudecodexbackup"
+    if [ ! -d "$CFGDIR" ] && [ -d "$DESK_HOME/.config/claudebackup-linux" ]; then
+        mv "$DESK_HOME/.config/claudebackup-linux" "$CFGDIR" 2>/dev/null || true
+    fi
     CFGFILE="$CFGDIR/configuration.txt"
     mkdir -p "$CFGDIR"
     if [ -f "$CFGFILE" ] && grep -q '^imageFormat=' "$CFGFILE"; then
@@ -264,9 +268,16 @@ install_gui_deps() {
 # BIOS/UEFI boot files the live ISO is made from (Arch uses the cloner's embedded claudemods zip
 # instead). Kept in a persistent folder; the cloner only reads it (BOOTLOADER_DIR in cloner/src/common.h).
 BOOTLOADER_URL="https://github.com/pieroproietti/penguins-bootloaders/releases/download/v26.1.16/bootloaders.tar.gz"
-BOOTLOADER_DIR="/usr/local/share/claudebackup-linux/bootloaders"
+BOOTLOADER_DIR="/usr/local/share/claudecodexbackup/bootloaders"
 install_bootloaders() {
     [ "$FAMILY" = arch ] && return 0
+    # earlier releases kept them in /usr/local/share/claudebackup-linux: move them instead of downloading
+    OLD_BL=/usr/local/share/claudebackup-linux/bootloaders
+    if [ ! -f "$BOOTLOADER_DIR/.download-complete" ] && [ -f "$OLD_BL/.download-complete" ]; then
+        mkdir -p "$(dirname "$BOOTLOADER_DIR")"
+        rm -rf "$BOOTLOADER_DIR"
+        mv "$OLD_BL" "$BOOTLOADER_DIR" && rm -rf /usr/local/share/claudebackup-linux
+    fi
     [ -f "$BOOTLOADER_DIR/.download-complete" ] && return 0
     # CCCU carries the boot files inside itself (resources/ of its provisioning bundle): no download
     if [ -s "$SUITE/resources/bootloaders.tar.gz" ]; then
@@ -398,13 +409,14 @@ configure_installer() {
         gentoo)          GRUB=grub;  INITRAMFS=dracut ;;
     esac
 
-    if [ -f "$CFG/settings.conf" ] && [ ! -f "$CFG/.claudebackup" ] && [ ! -d "$CFG.orig" ]; then
+    if [ -f "$CFG/settings.conf" ] && [ ! -f "$CFG/.claudecodexbackup" ] && [ ! -f "$CFG/.claudebackup" ] && [ ! -d "$CFG.orig" ]; then
         say "Keeping the previous Claude Codex Install config in $CFG.orig"
         cp -a "$CFG" "$CFG.orig"
     fi
     mkdir -p "$MOD" "$CFG/scripts"
     rm -f "$MOD/unpackfs-clone.conf"
-    : > "$CFG/.claudebackup"
+    rm -f "$CFG/.claudebackup"
+    : > "$CFG/.claudecodexbackup"
 
     SYSTEMD=0
     [ -d /run/systemd/system ] && SYSTEMD=1
@@ -671,8 +683,8 @@ EOF
 # (pkexec drops it, and Claude Codex Install is a GUI). The root helper first matches the unpack settings
 # to the ISO's real image (squashfs / erofs) and loads its kernel module.
 install_installer_launcher() {
-    mkdir -p /usr/local/lib/claudebackup
-    cat > /usr/local/lib/claudebackup/install-root.sh << 'EOF'
+    mkdir -p /usr/local/lib/claudecodexbackup
+    cat > /usr/local/lib/claudecodexbackup/install-root.sh << 'EOF'
 #!/bin/sh
 for conf in /etc/claudeinstall/modules/unpackfs.conf; do
     [ -f "$conf" ] || continue
@@ -681,7 +693,7 @@ for conf in /etc/claudeinstall/modules/unpackfs.conf; do
     TYPE=$(blkid -p -o value -s TYPE "$SRC" 2>/dev/null || true)
     case "$TYPE" in
         squashfs|erofs)
-            echo "claudebackup: $SRC is $TYPE"
+            echo "claude-codex-install: $SRC is $TYPE"
             sed -i -E "s#^([[:space:]]*sourcefs:[[:space:]]*).*#\1\"$TYPE\"#" "$conf"
             modprobe "$TYPE" 2>/dev/null || true ;;
     esac
@@ -690,16 +702,16 @@ done
 if command -v claudeinstall >/dev/null 2>&1; then exec claudeinstall -D 6 "$@"; fi
 exec claudeinstall-tui "$@"
 EOF
-    chmod 755 /usr/local/lib/claudebackup/install-root.sh
+    chmod 755 /usr/local/lib/claudecodexbackup/install-root.sh
 
     cat > /usr/local/bin/claudebackup-install << 'EOF'
 #!/bin/sh
-# Opens Claude Codex Install as root (the "Install ..." desktop shortcut of the claudebackup live ISO).
+# Opens Claude Codex Install as root (the "Install ..." desktop shortcut of the Claude Codex Backup live ISO).
 # Everything goes to a log, and if it does not start a message window says why, so a desktop
 # click never fails silently.
-LOG="/tmp/claudebackup-install-$(id -u).log"
+LOG="/tmp/claudecodexbackup-install-$(id -u).log"
 echo "=== $(date): starting Claude Codex Install (user $(id -un), session ${XDG_SESSION_TYPE:-?})" >> "$LOG"
-ROOT_HELPER=/usr/local/lib/claudebackup/install-root.sh
+ROOT_HELPER=/usr/local/lib/claudecodexbackup/install-root.sh
 # Only the terminal installer (claudeinstall-tui) was built: it runs in this terminal
 if ! command -v claudeinstall >/dev/null 2>&1; then
     if [ "$(id -u)" -eq 0 ]; then exec "$ROOT_HELPER" "$@"; fi
@@ -735,7 +747,8 @@ exit "$RC"
 EOF
     chmod 755 /usr/local/bin/claudebackup-install
     # the old Calamares launcher of claudebackup-linux, if it is still there
-    rm -f /usr/local/bin/claudebackup-calamares /usr/local/lib/claudebackup/calamares-root.sh
+    rm -f /usr/local/bin/claudebackup-calamares
+    rm -rf /usr/local/lib/claudebackup   # the folder of earlier releases (now /usr/local/lib/claudecodexbackup)
 }
 
 # =============================================================================
@@ -1125,6 +1138,30 @@ esac
 # =============================================================================
 # User phase: questions, root phase, build, install, the Complete screen (nothing is started)
 # =============================================================================
+
+# Logging: the whole run (questions, packages, every compiler line, install, Complete) is written to
+# logs/<date-time>/build.log (with colours) and build.txt (plain text); each step also has its own log
+# there. logs/latest points to the newest run. Done by running this script again through tee.
+if [ -z "${CLAUDE_CODEX_LOGDIR:-}" ]; then
+    LOGDIR="$SUITE/logs/$(date +%Y-%m-%d_%H-%M-%S)"
+    mkdir -p "$LOGDIR" || die "cannot create $LOGDIR"
+    ln -sfn "$LOGDIR" "$SUITE/logs/latest" 2>/dev/null || true
+    { CLAUDE_CODEX_LOGDIR="$LOGDIR" sh "$SELF" "$@"; echo $? > "$LOGDIR/.exit"; } 2>&1 | tee "$LOGDIR/build.log"
+    RC=$(cat "$LOGDIR/.exit" 2>/dev/null || echo 1)
+    rm -f "$LOGDIR/.exit"
+    ESC=$(printf '\033')
+    sed "s/$ESC\[[0-9;]*[A-Za-z]//g; s/\r/\n/g" "$LOGDIR/build.log" > "$LOGDIR/build.txt" 2>/dev/null || true
+    exit "$RC"
+fi
+LOGDIR="$CLAUDE_CODEX_LOGDIR"
+
+# step_errors LOG...: the error lines of build logs (compiler, linker, CMake, make / ninja)
+step_errors() {
+    _esc=$(printf '\033')
+    cat "$@" 2>/dev/null | sed "s/$_esc\[[0-9;]*[A-Za-z]//g" |
+        grep -E -A4 'error:|Error [0-9]|CMake Error|undefined reference|FAILED:|fatal error|No rule to make' | head -n 40
+}
+
 ASSUME_YES=0; WANT_INSTALLER=""; WANT_GUI=1; WANT_BTRFS=""; WANT_EROFS=0; WANT_CCCU=1
 IMODE=""; IUI=""   # Claude Codex Install's mode and interface: asked below unless given
 for a in "$@"; do
@@ -1284,8 +1321,9 @@ fi
 [ "$WANT_CCCU" = 1 ] || FLAGS="$FLAGS --no-cccu"
 FLAGS="${FLAGS# }"
 
-say "Installing packages as root"
-as_root sh "$SELF" --root-phase "$FAMILY" "$INSTALLER_ON" "$ALPINE_TOOLS" "$WANT_GUI" "$WANT_CCCU"
+say "Installing packages as root   (log: $LOGDIR/0-packages.log)"
+run_logged "$LOGDIR/0-packages.log" as_root sh "$SELF" --root-phase "$FAMILY" "$INSTALLER_ON" "$ALPINE_TOOLS" "$WANT_GUI" "$WANT_CCCU" ||
+    die "installing the packages failed - see $LOGDIR/0-packages.log"
 
 finalize_image_format
 
@@ -1298,24 +1336,23 @@ R_GUI=skipped; R_INSTALL=skipped; R_CCU=skipped   # for the summary: ok | failed
 banner() { printf '\n\033[1;31m=====\033[1;97m %s \033[1;31m=====\033[0;32m\n' "$*"; }
 
 banner "BUILD 1/4  Claude Codex Backup - the cloner (cloner/)"
-make -C "$CLONER" -j"$JOBS" || die "Claude Codex Backup (the cloner) did not build - see the messages above"
+if ! run_logged "$LOGDIR/1-backup.log" make -C "$CLONER" -j"$JOBS"; then
+    say "Claude Codex Backup (the cloner) did not build. The errors (full log: $LOGDIR/1-backup.log):"
+    printf '\033[0;91m'; step_errors "$LOGDIR/1-backup.log"; printf '\033[0m\n'
+    die "the cloner is needed by everything else - fix it and run ./build.sh again"
+fi
 
 if [ "$WANT_GUI" = 1 ]; then
     banner "BUILD 2/4  Claude Codex Cloner - the window (app/)"
     GEN=""
     if command -v ninja >/dev/null 2>&1 || command -v samu >/dev/null 2>&1; then GEN="-G Ninja"; fi
-    mkdir -p "$GUI_BUILD"
-    # shown live and kept in build-app/build.log; the error lines go to build-app/errors.log and are
-    # repeated on the Complete screen, so they do not scroll away
+    # shown live and kept in the run's logs; the errors are repeated on the Complete screen
     # shellcheck disable=SC2086
-    if run_logged "$GUI_BUILD/configure.log" cmake -S "$GUI_SRC" -B "$GUI_BUILD" $GEN -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr &&
-       run_logged "$GUI_BUILD/build.log" cmake --build "$GUI_BUILD" -j "$JOBS"; then
+    if run_logged "$LOGDIR/2-cloner-window-configure.log" cmake -S "$GUI_SRC" -B "$GUI_BUILD" $GEN -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr &&
+       run_logged "$LOGDIR/2-cloner-window.log" cmake --build "$GUI_BUILD" -j "$JOBS"; then
         GUI_OK=1; R_GUI=ok
-        rm -f "$GUI_BUILD/errors.log"
     else
         R_GUI=failed
-        cat "$GUI_BUILD/configure.log" "$GUI_BUILD/build.log" 2>/dev/null |
-            grep -E -A3 'error:|Error|CMake Error|undefined reference' > "$GUI_BUILD/errors.log" || true
     fi
 else
     banner "BUILD 2/4  Claude Codex Cloner (the window): skipped"
@@ -1328,13 +1365,16 @@ if [ "$INSTALLER_ON" = 1 ]; then
     else
         R_INSTALL=failed
     fi
+    for l in configure build errors; do
+        [ -f "$IBUILD/$l.log" ] && cp -f "$IBUILD/$l.log" "$LOGDIR/3-install-$l.log"
+    done
 else
     banner "BUILD 3/4  Claude Codex Install: skipped"
 fi
 
 if [ "$WANT_CCCU" = 1 ]; then
     banner "BUILD 4/4  Claude Codex CCU (cccu/)"
-    if build_cccu; then
+    if run_logged "$LOGDIR/4-ccu.log" build_cccu; then
         CCCU_OK=1; R_CCU=ok
     else
         R_CCU=failed
@@ -1347,8 +1387,8 @@ fi
 # Phase 2: INSTALL everything that compiled, as root (one password prompt)
 # =============================================================================
 banner "INSTALL  everything that compiled (as root)"
-as_root sh "$SELF" --install-all "$GUI_OK" "$INSTALLER_OK" "$IMODE" "$BTRFS" "$EROFS" "$CCCU_OK" "$FLAGS" ||
-    die "installing failed - see the messages above"
+run_logged "$LOGDIR/5-install.log" as_root sh "$SELF" --install-all "$GUI_OK" "$INSTALLER_OK" "$IMODE" "$BTRFS" "$EROFS" "$CCCU_OK" "$FLAGS" ||
+    die "installing failed - see $LOGDIR/5-install.log"
 command -v "$TARGET" >/dev/null 2>&1 || die "$TARGET is not on PATH after install"
 [ "$INSTALLER_OK" = 1 ] || INSTALLER_ON=0
 
@@ -1381,15 +1421,27 @@ row "Claude Codex CCU"     "$R_CCU"     "$HOW_CCU"
 row "claude-codex"         ok           "claude-codex  (menu of everything)  /  claude-codex update  (update everything)"
 printf '\n'
 FAILED=0
-if [ "$R_GUI" = failed ]; then
+# show_failure NAME HINT LOG...: the tool's error lines, so they never scroll away
+show_failure() {
+    _name=$1; _hint=$2; shift 2
     FAILED=1
-    say "Claude Codex Cloner did not compile. The errors (all of them: $GUI_BUILD/errors.log, full output: build.log):"
+    say "$_name did not build${_hint:+ ($_hint)}. Its errors:"
     printf '\033[0;91m'
-    head -n 40 "$GUI_BUILD/errors.log" 2>/dev/null
-    printf '\033[0m\n'
+    step_errors "$@" | sed 's/^/    /'
+    printf '\033[0m'
+    say "full log: $1"
+    printf '\n'
+}
+if [ "$R_GUI" = failed ]; then
+    show_failure "Claude Codex Cloner (the window)" "" "$LOGDIR/2-cloner-window-configure.log" "$LOGDIR/2-cloner-window.log"
 fi
-if [ "$R_INSTALL" = failed ]; then FAILED=1; say "Claude Codex Install: every error in $IBUILD/errors.log (configure: configure.log, all output: build.log)"; fi
-if [ "$R_CCU" = failed ]; then FAILED=1; say "Claude Codex CCU: see the messages above (needs GCC 14+ / Clang 17+ and CMake 3.25+; build folder $CBUILD)"; fi
+if [ "$R_INSTALL" = failed ]; then
+    show_failure "Claude Codex Install" "every error: $LOGDIR/3-install-errors.log" "$LOGDIR/3-install-configure.log" "$LOGDIR/3-install-build.log"
+fi
+if [ "$R_CCU" = failed ]; then
+    show_failure "Claude Codex CCU" "needs GCC 14+ / Clang 17+ and CMake 3.25+" "$LOGDIR/4-ccu.log"
+fi
+printf '\033[1;97mLogs of this run:\033[0m %s  (build.txt = everything as plain text, one log per step)\n' "$LOGDIR"
 printf '\033[0m'
 if [ "$FAILED" = 1 ]; then
     printf '\033[1;91mNot everything you picked was built. Fix the errors above and run ./build.sh again.\033[0m\n'

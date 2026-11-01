@@ -27,7 +27,7 @@ std::atomic<bool> menu_needs_refresh(false);
 
 const std::string COLOR_HIGHLIGHT = "\033[92m";
 
-// Saved from the setup menu (~/.config/claudebackup-linux/configuration.txt)
+// Saved from the setup menu (~/.config/claudecodexbackup/configuration.txt)
 struct MenuConfig {
     std::string isoName;       // empty = auto-generated
     std::string workDir;       // empty = default
@@ -62,7 +62,13 @@ void chownToUser(const std::string& dir) {
     runPlain("chown \"$(id -u " + shq(USERNAME) + "):$(id -g " + shq(USERNAME) + ")\" " + shq(dir) + " 2>/dev/null");
 }
 
-std::string configDirPath() { return userHome() + "/.config/" + APP_BIN; }
+// ~/.config/claudecodexbackup; an older ~/.config/claudebackup-linux is moved there the first time
+std::string configDirPath() {
+    const std::string dir = userHome() + "/.config/claudecodexbackup";
+    const std::string old = userHome() + "/.config/" + APP_BIN;
+    if (!isDirectory(dir) && isDirectory(old)) runPlain("mv " + shq(old) + " " + shq(dir) + " 2>/dev/null");
+    return dir;
+}
 std::string configFilePath() { return configDirPath() + "/configuration.txt"; }
 // The user's edited copies of grub.cfg, kernels.cfg, ... (Setup > Edit Configs)
 std::string customDirPath() { return configDirPath() + "/custom"; }
@@ -729,7 +735,7 @@ bool launchInstaller() {
     const std::string cmd = isRegularFile(INSTALLER_LAUNCHER) ? INSTALLER_LAUNCHER : INSTALLER_BIN;
     logNormal("Starting " + INSTALLER_NAME + " (" + cmd + ")...");
     if (runCommand(cmd) != 0) {
-        logError(INSTALLER_NAME + " stopped with an error (log: /tmp/claudebackup-install-" + std::to_string(getuid()) + ".log).");
+        logError(INSTALLER_NAME + " stopped with an error (log: /tmp/claudecodexbackup-install-" + std::to_string(getuid()) + ".log).");
         return false;
     }
     return true;

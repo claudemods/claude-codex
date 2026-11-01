@@ -185,7 +185,7 @@ Result create_iso(Options o) {
         char stamp[64];
         const std::time_t now = std::time(nullptr);
         std::strftime(stamp, sizeof stamp, "%Y-%m-%d_%H%M", std::localtime(&now));
-        iso_name = "claudebackup-" + (system.id.empty() ? std::string("linux") : lower(system.id)) + "-" + stamp + ".iso";
+        iso_name = "claudecodexbackup-" + (system.id.empty() ? std::string("linux") : lower(system.id)) + "-" + stamp + ".iso";
     } else if (iso_name.size() < 4 || iso_name.substr(iso_name.size() - 4) != ".iso") {
         iso_name += ".iso";
     }
@@ -314,7 +314,7 @@ Result create_iso(Options o) {
     build_options.interactive = true;
     const char* term = std::getenv("TERM");
     if (!in_container(o.name, build, build_options, {"CBL_KERNEL=" + kernel, std::string("TERM=") + (term && *term ? term : "linux")}, true).ok()) {
-        return fail("The ISO build failed (see above; /var/log/claudebackup-linux.log inside the container has the details).");
+        return fail("The ISO build failed (see above; /var/log/claudecodexbackup.log inside the container has the details).");
     }
 
     // 7 -----------------------------------------------------------------------------------------

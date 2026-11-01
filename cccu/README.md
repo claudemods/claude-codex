@@ -197,7 +197,7 @@ engine is linked statically, so it starts in any container; on Fedora/openSUSE b
 sudo cccu iso --name desktop --iso-out ~/isos --iso-level 6 --iso-format squashfs
 sudo cccu iso --name desktop --iso-out ~/isos --on-reboot      # set up now, build on the next boot (the only way the GUI builds)
 sudo cccu iso --name desktop --iso-out ~/isos --on-console     # build now, progress on VT1 like the first-boot service
-sudo cccu iso-usb --iso-file ~/isos/claudebackup-arch-2026-10-30_1200.iso --drive /dev/sdX
+sudo cccu iso-usb --iso-file ~/isos/claudecodexbackup-arch-2026-10-30_1200.iso --drive /dev/sdX
 ```
 
 The service shows the animated squashfs/erofs bar, then a green "Creating the ISO" bar for the ISO stage. When the
@@ -273,7 +273,7 @@ Notes:
   the installer's default filesystem.
 * In the live ISO: double-click **Install &lt;distro&gt;** on the Desktop (or run `claudebackup-install`). It asks
   for the password, matches the unpack settings to the ISO's real image type (squashfs / erofs) and starts
-  ClaudeInstall. Its log is `/tmp/claudebackup-install-<uid>.log`.
+  ClaudeInstall. Its log is `/tmp/claudecodexbackup-install-<uid>.log`.
 
 ## Display modes (the toggle)
 
@@ -441,7 +441,7 @@ Every run writes a structured log to `/var/log/cccu/`:
 | `export.log` | exports |
 | `iso.log` | ISO builds (including building ClaudeInstall in the container) and writing an ISO to USB |
 
-Inside the container the engine also logs to `/var/log/claudebackup-linux.log`, and ClaudeInstall's own build
+Inside the container the engine also logs to `/var/log/claudecodexbackup.log`, and ClaudeInstall's own build
 errors (if any) are in `/opt/cccu-iso/installer/build/errors.log` until the run finishes.
 
 One record per line - `date time LEVEL text`:

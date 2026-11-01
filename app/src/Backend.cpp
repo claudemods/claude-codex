@@ -334,7 +334,7 @@ Backend::onFinished( int exitCode, QProcess::ExitStatus status )
     }
     else
     {
-        message = tr( "Failed (exit code %1). The log is in /var/log/claudebackup-linux.log." ).arg( exitCode );
+        message = tr( "Failed (exit code %1). The log is in /var/log/claudecodexbackup.log." ).arg( exitCode );
     }
     Q_EMIT taskFinished( ok, cancelled, message );
 }

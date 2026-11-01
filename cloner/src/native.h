@@ -371,6 +371,7 @@ inline std::string generateExcludeList(const Context& c) {
         "etc/udev/rules.d/70-persistent-cd.rules", "etc/udev/rules.d/70-persistent-net.rules",
         "swapfile",
         // Claude Codex Backup's boot build (bootbuild.h): the clone must never build again by itself
+        "var/lib/claudecodexbackup/*",
         "var/lib/claudebackup-linux/*",
         "etc/systemd/system/claude-codex-backup-boot.service",
         "etc/systemd/system/*/claude-codex-backup-boot.service",

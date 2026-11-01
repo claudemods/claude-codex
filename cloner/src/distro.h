@@ -93,13 +93,13 @@ inline Distro detectDistro() {
     return d;
 }
 
-// Default ISO name: "claudebackup-<distro>-<YYYY-MM-DD_HHMM>.iso", e.g. claudebackup-gentoo-2026-10-26_1430.iso
+// Default ISO name: "claudecodexbackup-<distro>-<YYYY-MM-DD_HHMM>.iso", e.g. claudecodexbackup-gentoo-2026-10-26_1430.iso
 inline std::string makeIsoName(const Distro& d) {
     char ts[64];
     time_t now = time(nullptr);
     strftime(ts, sizeof(ts), "%Y-%m-%d_%H%M", localtime(&now));
     std::string distro = d.distroID.empty() ? "linux" : toLower(d.distroID);
-    return replaceAll("claudebackup-" + distro + "-" + ts + ".iso", " ", "-");
+    return replaceAll("claudecodexbackup-" + distro + "-" + ts + ".iso", " ", "-");
 }
 
 #endif

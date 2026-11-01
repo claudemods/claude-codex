@@ -14,7 +14,7 @@ namespace bootbuild {
 
 const std::string UNIT      = "claude-codex-backup-boot.service";
 const std::string UNIT_PATH = "/etc/systemd/system/" + UNIT;
-const std::string STATE_DIR = "/var/lib/claudebackup-linux";
+const std::string STATE_DIR = "/var/lib/claudecodexbackup";
 const std::string PENDING   = STATE_DIR + "/boot-build-pending";
 const std::string SCRIPT    = STATE_DIR + "/boot-build.sh";   // what the service runs (no unit-file quoting)
 const std::string DROPIN    = "10-claude-codex-backup.conf";

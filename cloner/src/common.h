@@ -31,12 +31,12 @@ const std::string APP_BIN     = "claudebackup-linux";
 const std::string LIVE_LABEL = "CCB_LIVE";
 
 // Paths
-const std::string CONFIG_DIR  = "/etc/claudebackup-linux";
+const std::string CONFIG_DIR  = "/etc/claudecodexbackup";
 const std::string STAGING_DIR = "/tmp/ccb";
-const std::string DEFAULT_WORK_DIR = "/home/claudebackup";
-const std::string LOG_FILE    = "/var/log/claudebackup-linux.log";
+const std::string DEFAULT_WORK_DIR = "/home/claudecodexbackup";
+const std::string LOG_FILE    = "/var/log/claudecodexbackup.log";
 // BIOS/UEFI boot files, downloaded by the compendium's build.sh (the app never downloads anything)
-const std::string BOOTLOADER_DIR = "/usr/local/share/claudebackup-linux/bootloaders";
+const std::string BOOTLOADER_DIR = "/usr/local/share/claudecodexbackup/bootloaders";
 
 // What messages tell the user to run when a tool is missing. The same engine runs on the host
 // (claudebackup-linux, installed by the compendium's build.sh) and inside an Incus container (CCCU's
