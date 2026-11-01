@@ -138,6 +138,15 @@ inline bool ensureMkinitcpioConfig() {
 // ClaudeInstall installs the clone everywhere except Alpine, which keeps its own installer below
 inline bool installerAvailable(const Distro& d) { return d.supported() && d.family != "alpine"; }
 
+// What the installed configuration installs: "clone", "distro", "new", or "" (no configuration)
+inline std::string installerMode() {
+    const std::string settings = readFile(INSTALLER_CONF_DIR + "/settings.conf");
+    if (settings.empty()) return "";
+    if (isRegularFile(INSTALLER_CONF_DIR + "/modules/unpackfs.conf") && settings.find("unpackfs") != std::string::npos) return "clone";
+    if (settings.find("distroprofile") != std::string::npos) return "distro";
+    return "new";
+}
+
 // ClaudeInstall is installed and the compendium's build.sh has written its clone configuration
 inline bool installerReady() {
     // the Qt6 window (claudeinstall) or only the terminal installer (claudeinstall-tui)

@@ -24,7 +24,8 @@ QMainWindow, #pages, QScrollArea, QScrollArea > QWidget > QWidget { background: 
 #header { background: #0f1115; border-bottom: 1px solid #23262e; }
 #brand { font-size: 17pt; font-weight: 700; color: #ffffff; }
 #brandRed { font-size: 17pt; font-weight: 700; color: #d7263d; }
-#release { color: #6b7280; }
+#release { color: #22d3ee; font-weight: 600; }
+#tagline { color: #22d3ee; font-style: italic; }
 #brandSub { color: #d7263d; font-weight: 600; letter-spacing: 1px; }
 #nav { background: transparent; border: none; outline: none; }
 #nav::item { padding: 10px 10px; margin: 2px 0; border-radius: 8px; color: #b9bec8; }

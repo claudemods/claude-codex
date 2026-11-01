@@ -477,10 +477,34 @@ BackupView::fillOverview()
     }
     else if ( installer != QLatin1String( "none" ) )
     {
-        add( installerReady ? Ok : Warn,
-             tr( "Claude Codex Install" ),
-             installerReady ? tr( "Installed and configured to put this clone on a disk from the live ISO." )
-                            : tr( "Not set up: the live ISO would have no installer. Run build.sh in the compendium folder and answer yes to Claude Codex Install." ) );
+        // installed is one thing, set up to install THIS clone another: build.sh's "distro" and "new" modes
+        // install the installer too, configured for something else
+        const bool installed = s.flag( QStringLiteral( "installerInstalled" ) );
+        const QString mode = s.value( QStringLiteral( "installerMode" ) );
+        QString text;
+        if ( installerReady )
+        {
+            text = tr( "Installed and configured to put this clone on a disk from the live ISO." );
+        }
+        else if ( installed && mode == QLatin1String( "distro" ) )
+        {
+            text = tr( "Installed in distro mode: it installs the claudemods distributions online (pacstrap + profile), "
+                       "not this clone. For ISOs that install themselves, run build.sh with installer mode 1 (the cloned system)." );
+        }
+        else if ( installed && mode == QLatin1String( "new" ) )
+        {
+            text = tr( "Installed in new-system mode: it installs a new system with users and packages, not this clone. "
+                       "For ISOs that install themselves, run build.sh with installer mode 1 (the cloned system)." );
+        }
+        else if ( installed )
+        {
+            text = tr( "Installed, but not configured yet. Run build.sh again and pick an installer mode." );
+        }
+        else
+        {
+            text = tr( "Not installed: the live ISO would have no installer. Run build.sh in the compendium folder and answer yes to Claude Codex Install." );
+        }
+        add( installerReady ? Ok : installed ? Info : Warn, tr( "Claude Codex Install" ), text );
     }
 
     const bool erofs = s.value( QStringLiteral( "imageFormat" ) ) == QLatin1String( "erofs" );
@@ -732,7 +756,11 @@ BackupView::startBuild()
     if ( m_status.value( QStringLiteral( "installer" ) ) == QLatin1String( "claudeinstall" ) && !m_status.flag( QStringLiteral( "installerReady" ) )
          && QMessageBox::question( this,
                                    tr( "Build ISO" ),
-                                   tr( "Claude Codex Install is not set up, so the live ISO will not be able to install itself to a disk.\n\nBuild anyway?" ) )
+                                   m_status.flag( QStringLiteral( "installerInstalled" ) )
+                                       ? tr( "Claude Codex Install is installed in %1 mode, so the live ISO's installer will not install this clone "
+                                             "(it has no \"Install\" shortcut).\n\nBuild anyway?" )
+                                             .arg( m_status.value( QStringLiteral( "installerMode" ), QStringLiteral( "another" ) ) )
+                                       : tr( "Claude Codex Install is not installed, so the live ISO will not be able to install itself to a disk.\n\nBuild anyway?" ) )
              != QMessageBox::Yes )
     {
         return;
@@ -1688,12 +1716,22 @@ BackupView::fillInstall()
         return;
     }
     const bool ready = m_status.flag( QStringLiteral( "installerReady" ) );
+    const bool installed = m_status.flag( QStringLiteral( "installerInstalled" ) );
+    const QString mode = m_status.value( QStringLiteral( "installerMode" ) );
     const bool available = m_status.value( QStringLiteral( "installer" ) ) == QLatin1String( "claudeinstall" );
     m_installerState->setText( !available ? tr( "<span style='color:#ff5c6c'>This distro is not supported.</span>" )
                                : ready    ? tr( "<span style='color:#5fbf7a'>✓ Claude Codex Install is installed and configured for this clone.</span>" )
-                                          : tr( "<span style='color:#e5c07b'>! Claude Codex Install is not set up. Run build.sh in the compendium folder and answer yes to Claude Codex Install, "
-                                                "then build the ISO again.</span>" ) );
-    m_launchInstaller->setEnabled( available && ready );
+                               : installed && !mode.isEmpty()
+                                   ? tr( "<span style='color:#5fbf7a'>✓ Claude Codex Install is installed</span> "
+                                         "<span style='color:#e5c07b'>in %1 mode - it installs %2, not this clone.</span>" )
+                                         .arg( mode,
+                                               mode == QLatin1String( "distro" ) ? tr( "the claudemods distributions online" )
+                                                                                 : tr( "a new system with users and packages" ) )
+                               : installed ? tr( "<span style='color:#e5c07b'>! Claude Codex Install is installed but not configured. Run build.sh again.</span>" )
+                                           : tr( "<span style='color:#e5c07b'>! Claude Codex Install is not installed. Run build.sh in the compendium folder and answer yes to "
+                                                 "Claude Codex Install, then build the ISO again.</span>" ) );
+    // it can be started in any mode it is configured for
+    m_launchInstaller->setEnabled( available && installed && !mode.isEmpty() );
 }
 
 void
@@ -1717,7 +1755,18 @@ BackupView::launchInstaller()
     }
     else
     {
-        started = QProcess::startDetached( QStringLiteral( "pkexec" ), { QStringLiteral( "claudeinstall" ) } );
+        // no clone launcher (distro / new mode): start the installer as root with this session's display
+        const QString bin = QStandardPaths::findExecutable( QStringLiteral( "claudeinstall" ) );
+        QStringList args { QStringLiteral( "env" ) };
+        for ( const char* name : { "DISPLAY", "XAUTHORITY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XDG_SESSION_TYPE" } )
+        {
+            if ( qEnvironmentVariableIsSet( name ) )
+            {
+                args << QStringLiteral( "%1=%2" ).arg( QString::fromLatin1( name ), qEnvironmentVariable( name ) );
+            }
+        }
+        args << ( bin.isEmpty() ? QStringLiteral( "/usr/bin/claudeinstall" ) : bin );
+        started = QProcess::startDetached( QStringLiteral( "pkexec" ), args );
     }
     if ( !started )
     {

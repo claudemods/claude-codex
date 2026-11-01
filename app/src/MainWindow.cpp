@@ -134,8 +134,11 @@ MainWindow::makeHeader()
     brandRow->addStretch( 1 );
     auto* release = new QLabel( tr( "%1  ·  Backup · Install · CCU" ).arg( QString::fromLatin1( kRelease ) ) );
     release->setObjectName( QStringLiteral( "release" ) );
+    auto* tagline = new QLabel( tr( "Sailing the 7 seas like Penguin's Eggs, Remastersys, Refracta, Systemback and father Knoppix!" ) );
+    tagline->setObjectName( QStringLiteral( "tagline" ) );
     brandCol->addLayout( brandRow );
     brandCol->addWidget( release );
+    brandCol->addWidget( tagline );
     h->addLayout( brandCol, 1 );
 
     m_ccuPill = new QLabel;

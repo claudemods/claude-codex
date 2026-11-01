@@ -729,7 +729,9 @@ inline bool runMksquashfs(const Context& c, const std::string& dest) {
         // exclude list so the work directory and host-only files stay out
         std::string comp = algo == "xz" ? "-comp xz -b 256K -Xbcj x86"
                                         : "-comp " + algo + (algo == "zstd" ? " -Xcompression-level " + std::to_string(lvl) : "") + " -b 256K";
-        cmd = "mksquashfs " + shq(src) + " " + shq(dest) + " -noappend " + comp +
+        // -progress: mksquashfs only draws its progress bar on a terminal by itself; in Claude Codex
+        // Cloner its output is a pipe, so the bar has to be asked for (it looks the same in both)
+        cmd = "mksquashfs " + shq(src) + " " + shq(dest) + " -noappend -progress " + comp +
             " -wildcards -p 'mnt d 0755 root root' -p 'media d 0755 root root' -ef " + shq(c.excludeList);
     } else {
         cmd = "mksquashfs " + shq(src) + " " + shq(dest) +

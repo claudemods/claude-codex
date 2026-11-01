@@ -109,6 +109,10 @@ inline int printStatus() {
     kv("installer", remaster::installerAvailable(d) ? INSTALLER_BIN : d.family == "alpine" ? "alpine" : "none");
     kv("installerReady", remaster::installerAvailable(d) ? b(remaster::installerReady())
                                                          : b(d.family == "alpine" && remaster::alpineInstallerReady()));
+    // installed at all (GUI or terminal), and what build.sh set it up to install: clone (this system, from
+    // the live ISO), new (a new system with users) or distro (claudemods distributions online)
+    kv("installerInstalled", b(commandExists(INSTALLER_BIN) || commandExists(INSTALLER_BIN + "-tui")));
+    kv("installerMode", remaster::installerMode());
     kv("installerLauncher", INSTALLER_LAUNCHER);
     kv("erofsSupported", b(d.erofsSupported()));
     kv("erofsKernel", b(native::kernelHasErofs()));
