@@ -972,7 +972,7 @@ MainWindow::makeConfigsPage()
     m_editor->setEnabled( false );
     ec->addWidget( m_editor, 1 );
     auto* buttons = new QHBoxLayout;
-    m_configCreate = button( tr( "Create My Copy" ), QStringLiteral( "document-new" ), "primary" );
+    m_configCreate = button( tr( "Try Again" ), QStringLiteral( "view-refresh" ), "primary" );
     m_configReset = button( tr( "Reset To Generated" ), QStringLiteral( "edit-delete" ), "danger" );
     m_configReload = button( tr( "Reload" ), QStringLiteral( "view-refresh" ) );
     m_configSave = button( tr( "Save" ), QStringLiteral( "document-save" ), "primary" );
@@ -1032,26 +1032,36 @@ MainWindow::makeConfigsPage()
                      return;
                  }
                  const QString name = m_configCurrent->data( Qt::UserRole + 1 ).toString();
+                 m_seedFailed.removeAll( name );
                  m_configTask->setVisible( true );
                  // finished arrives later, so connecting after a successful start never misses it
-                 if ( !m_configTask->start( tr( "Creating your copy of %1" ).arg( name ), { QStringLiteral( "--seed-custom" ), name }, false ) )
+                 if ( !m_configTask->start( tr( "Opening %1" ).arg( name ), { QStringLiteral( "--preview-custom" ), name }, false ) )
                  {
+                     m_seedFailed << name;
                      return;
                  }
                  connect(
                      m_configTask,
                      &TaskPanel::finished,
                      this,
-                     [ this ]( bool ok, bool )
+                     [ this, name ]( bool ok, bool )
                      {
-                         if ( ok )
+                         const QString preview = m_status.value( QStringLiteral( "customDir" ) ) + QStringLiteral( "/.generated/" ) + name;
+                         if ( ok && QFileInfo( preview ).isFile() )
                          {
-                             refreshStatus();
-                             QListWidgetItem* it = m_configCurrent;
-                             m_configCurrent = nullptr;
-                             m_editorDirty = false;
-                             loadConfigItem( it );
+                             m_previewed << name;
+                             // the panel is only for when something goes wrong
+                             m_configTask->setVisible( false );
                          }
+                         else
+                         {
+                             // also when it "succeeded" without a file: never retry on its own (no loop)
+                             m_seedFailed << name;
+                         }
+                         QListWidgetItem* it = m_configCurrent;
+                         m_configCurrent = nullptr;
+                         m_editorDirty = false;
+                         loadConfigItem( it );
                      },
                      Qt::SingleShotConnection );
              } );
@@ -1071,6 +1081,7 @@ MainWindow::makeConfigsPage()
                      return;
                  }
                  QFile::remove( m_status.value( QStringLiteral( "customDir" ) ) + QLatin1Char( '/' ) + name );
+                 m_previewed.removeAll( name );   // show a freshly generated version (current settings)
                  m_editorDirty = false;
                  refreshStatus();
                  QListWidgetItem* it = m_configCurrent;
@@ -1166,24 +1177,53 @@ MainWindow::loadConfigItem( QListWidgetItem* item )
     const QString path = custom ? m_status.value( QStringLiteral( "customDir" ) ) + QLatin1Char( '/' ) + key : key;
     const bool exists = QFileInfo( path ).isFile();
 
-    m_configPath->setText( path + ( custom ? tr( "   (your copy, used by the next build)" ) : tr( "   (saved as administrator, keeps a .bak)" ) ) );
+    // What the build would generate (custom/.generated/<name>, never read by the build), shown for a
+    // file you have not changed yet; Save turns it into your copy
+    const QString preview = m_status.value( QStringLiteral( "customDir" ) ) + QStringLiteral( "/.generated/" ) + key;
+    const bool showPreview = custom && !exists && m_previewed.contains( key ) && QFileInfo( preview ).isFile();
+    const bool editable = exists || showPreview;
+
+    m_configPath->setText( path
+                           + ( !custom        ? tr( "   (saved as administrator, keeps a .bak)" )
+                               : exists       ? tr( "   (your copy - every build uses it until you reset it)" )
+                                              : tr( "   (as the build generates it - Save makes it your copy)" ) ) );
     m_editor->setEnabled( false );
-    if ( exists )
+    m_editor->setPlaceholderText( QString() );
+    if ( editable )
     {
-        QFile f( path );
+        QFile f( exists ? path : preview );
         m_editor->setPlainText( f.open( QIODevice::ReadOnly ) ? QString::fromUtf8( f.readAll() ) : QString() );
         m_editor->setEnabled( true );
     }
     else
     {
-        m_editor->setPlainText( custom ? tr( "No copy yet.\n\n\"Create My Copy\" makes one from what the build generates for %1." ).arg( m_status.value( QStringLiteral( "distro" ) ) )
-                                       : tr( "Not installed. Run build.sh in the compendium folder and answer yes to Claude Codex Install." ) );
+        // Status goes in the grey placeholder, never into the file text itself
+        m_editor->clear();
+        if ( custom && !m_seedFailed.contains( key ) )
+        {
+            // First time this file is opened: fetch what the build generates, then it opens ready to edit
+            m_editor->setPlaceholderText( tr( "Opening %1 as the build makes it for %2 ..." )
+                                              .arg( key, m_status.value( QStringLiteral( "distro" ) ) ) );
+            if ( !m_configTask->isActive() )
+            {
+                QTimer::singleShot( 0, m_configCreate, &QPushButton::click );
+            }
+        }
+        else if ( custom )
+        {
+            m_editor->setPlaceholderText( tr( "%1 could not be generated - the log below says why.\n\"Try Again\" makes it again." ).arg( key ) );
+        }
+        else
+        {
+            m_editor->setPlaceholderText( tr( "Not installed. Run build.sh in the compendium folder and answer yes to Claude Codex Install." ) );
+        }
     }
     m_editorDirty = false;
-    m_configCreate->setVisible( custom && !exists );
+    // only after a failed attempt: generating the file normally happens on its own when it is opened
+    m_configCreate->setVisible( custom && !editable && m_seedFailed.contains( key ) );
     m_configReset->setVisible( custom && exists );
     m_configReload->setVisible( exists );
-    m_configSave->setVisible( exists );
+    m_configSave->setVisible( editable );
 }
 
 void
@@ -1206,6 +1246,10 @@ MainWindow::saveConfigItem()
         }
         m_editorDirty = false;
         refreshStatus();
+        // a saved preview is now your copy: show it as such (label, Reset)
+        QListWidgetItem* it = m_configCurrent;
+        m_configCurrent = nullptr;
+        loadConfigItem( it );
         return;
     }
     m_configTask->setVisible( true );

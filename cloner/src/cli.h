@@ -29,6 +29,7 @@ inline const std::vector<Command>& commands() {
         {"--install-alpine",    true,  "DISK ext4|btrfs 0|1  Alpine live ISO: install the clone (1 = zstd:22)"},
         {"--mkinitcpio-config", true,  "Arch: put 11-dm-initramfs.rules in place"},
         {"--seed-custom",       true,  "NAME  create your editable copy of a boot/initramfs file"},
+        {"--preview-custom",    true,  "NAME  what the build would generate for that file (not used by the build)"},
         {"--write-system-file", true,  "PATH  replace an installer config file with stdin (keeps PATH.bak)"},
         {"--launch-installer",  true,  "start Claude Codex Install for the clone"},
         {"--update",            true,  "download, build and install the latest cloner"},
@@ -178,11 +179,14 @@ inline int setValues(const std::vector<std::string>& args) {
     return 0;
 }
 
-inline int seedCustom(const std::vector<std::string>& args) {
-    if (args.size() != 1) { logError("--seed-custom NAME"); return 2; }
+// preview = true (--preview-custom): write what the build would generate to custom/.generated/NAME,
+// which the build never reads - the app shows it, and only saving makes it the user's own copy
+inline int seedCustom(const std::vector<std::string>& args, bool preview = false) {
+    if (args.size() != 1) { logError(preview ? "--preview-custom NAME" : "--seed-custom NAME"); return 2; }
     for (const auto& f : remaster::customFilesFor(sysDistro())) {
         if (f.name != args[0]) continue;
-        const std::string path = customDirPath() + "/" + f.name;
+        const std::string path = customDirPath() + (preview ? "/.generated/" : "/") + f.name;
+        if (preview) unlink(path.c_str());   // always the current settings' version
         if (!isRegularFile(path) && !remaster::seedCustomFile(remaster::makeContext(currentOptions()), f.name, path)) return 1;
         // our copies live in the user's config folder and are edited as the user
         runPlain("chown " + shq(USERNAME) + " " + shq(configDirPath()) + " 2>/dev/null");
@@ -255,6 +259,7 @@ inline int run(const Command& cmd, int argc, char* argv[]) {
         return result(remaster::ensureMkinitcpioConfig());
     }
     if (name == "--seed-custom") return result(seedCustom(args) == 0);
+    if (name == "--preview-custom") return result(seedCustom(args, true) == 0);
     if (name == "--write-system-file") return result(writeSystemFile(args) == 0);
     if (name == "--launch-installer") return result(launchInstaller());
     if (name == "--update") return result(update::downloadBuildInstall());

@@ -133,6 +133,8 @@ private:
     TaskPanel* m_configTask = nullptr;
     QListWidgetItem* m_configCurrent = nullptr;
     bool m_editorDirty = false;
+    QStringList m_seedFailed;   // boot/initramfs files that could not be generated (shows "Try Again")
+    QStringList m_previewed;    // files whose generated version was fetched this session
 
     // Write USB
     QComboBox* m_isoCombo = nullptr;
