@@ -274,7 +274,7 @@ kept in `/etc/claudeinstall.orig`.
 - CCCU no longer ships an engine copy, `provision.sh` or Calamares zips. Its `cccu-iso-engine`
   is built from `cloner/src`, and its in-container provisioning uses the compendium's
   `build.sh` (`--root-phase`, then `--container-installer`).
-- The cloner's update check and self-update now point at a `claude-codex-compendium` repository.
+- The cloner's update check and self-update now point at a `claude-codex` repository.
   Change `REPO_URL` and the other update URLs in `cloner/src/common.h` if you publish it
   somewhere else.
 

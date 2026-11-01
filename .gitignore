@@ -1,0 +1,8 @@
+# build output
+/cloner/claudebackup-linux
+/build-qt6/
+/installer/build/
+/installer/build-helper/
+/installer/build.config
+/cccu/build/
+/cccu/resources/bootloaders.tar.gz

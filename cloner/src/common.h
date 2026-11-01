@@ -51,10 +51,10 @@ const std::string INSTALLER_SHARE_DIR = "/usr/share/claudeinstall";
 
 // Updates: the version on GitHub's main branch, and the source to build the update from.
 // The compendium's tarball holds the cloner in cloner/ (UPDATE_SUBDIR).
-const std::string REPO_URL           = "https://github.com/claudemods/claude-codex-compendium";
-const std::string REMOTE_VERSION_URL = "https://raw.githubusercontent.com/claudemods/claude-codex-compendium/main/cloner/version.txt";
-const std::string SOURCE_TARBALL_URL = "https://github.com/claudemods/claude-codex-compendium/archive/refs/heads/main.tar.gz";
-const std::string SOURCE_TARBALL_DIR = "claude-codex-compendium-main";   // top folder inside the tarball
+const std::string REPO_URL           = "https://github.com/claudemods/claude-codex";
+const std::string REMOTE_VERSION_URL = "https://raw.githubusercontent.com/claudemods/claude-codex/main/cloner/version.txt";
+const std::string SOURCE_TARBALL_URL = "https://github.com/claudemods/claude-codex/archive/refs/heads/main.tar.gz";
+const std::string SOURCE_TARBALL_DIR = "claude-codex-main";   // top folder inside the tarball
 const std::string UPDATE_SUBDIR      = "cloner";
 
 // ANSI color codes
