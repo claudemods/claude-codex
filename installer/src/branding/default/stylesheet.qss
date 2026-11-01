@@ -1,0 +1,29 @@
+/*
+ * SPDX-FileCopyrightText: no
+ * SPDX-License-Identifier: CC0-1.0
+ *
+ * ClaudeInstall look: blue accents (the old orange is gone).
+ */
+
+QPushButton {
+    background-color: #1f7ae0;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 16px;
+}
+QPushButton:hover { background-color: #3d90f0; }
+QPushButton:pressed { background-color: #165fb3; }
+QPushButton:disabled { background-color: #6b7a8f; color: #d5dbe4; }
+
+QProgressBar {
+    border: 1px solid #1f7ae0;
+    border-radius: 6px;
+    text-align: center;
+}
+QProgressBar::chunk {
+    background-color: #1f7ae0;
+    border-radius: 5px;
+}
+
+QLineEdit:focus, QComboBox:focus { border: 1px solid #1f7ae0; }
