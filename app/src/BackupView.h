@@ -16,7 +16,11 @@
 
 #include "Backend.h"
 
+#include <QList>
+#include <QPair>
 #include <QWidget>
+
+#include <functional>
 
 class QCheckBox;
 class QComboBox;
@@ -79,6 +83,7 @@ private:
     void startBuild();
     void toggleBootBuild();
     void saveSettings();
+    void refreshSettingBadges();
     void loadConfigItem( QListWidgetItem* item );
     bool confirmDiscardEdits();
     void saveConfigItem();
@@ -126,6 +131,9 @@ private:
     QCheckBox* m_ramMode = nullptr;
     QCheckBox* m_cleanCache = nullptr;
     QLabel* m_settingsNote = nullptr;
+    QWidget* m_isoTagRow = nullptr;     // the field + badge rows that are hidden on some distros
+    QWidget* m_levelRow = nullptr;
+    QList< QPair< QLabel*, std::function< bool() > > > m_settingBadges;   // badge, "is it the default?"
     bool m_settingsDirty = false;
 
     // Edit Configs

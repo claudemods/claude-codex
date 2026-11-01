@@ -833,7 +833,26 @@ BackupView::makeSettingsPage()
     m_form->setHorizontalSpacing( 18 );
     m_form->setVerticalSpacing( 12 );
 
-    auto dirty = [ this ]() { m_settingsDirty = true; };
+    auto dirty = [ this ]()
+    {
+        m_settingsDirty = true;
+        refreshSettingBadges();
+    };
+    // A field with its badge on the right: orange DEFAULT (the built-in default) or green SET (your own value)
+    auto badged = [ this ]( QWidget* field, std::function< bool() > isDefault ) -> QWidget*
+    {
+        auto* w = new QWidget;
+        auto* h = new QHBoxLayout( w );
+        h->setContentsMargins( 0, 0, 0, 0 );
+        h->setSpacing( 10 );
+        h->addWidget( field, 1 );
+        auto* badge = new QLabel;
+        badge->setFixedWidth( 74 );
+        badge->setAlignment( Qt::AlignCenter );
+        h->addWidget( badge );
+        m_settingBadges.append( { badge, std::move( isDefault ) } );
+        return w;
+    };
     auto withBrowse = [ this, dirty ]( QLineEdit* edit, bool cloneParent ) -> QWidget*
     {
         auto* w = new QWidget;
@@ -868,36 +887,53 @@ BackupView::makeSettingsPage()
     m_isoName = new QLineEdit;
     m_isoName->setPlaceholderText( tr( "automatic: claudebackup-<distro>-<date>.iso" ) );
     connect( m_isoName, &QLineEdit::textEdited, this, dirty );
-    m_form->addRow( tr( "ISO name" ), m_isoName );
+    m_form->addRow( tr( "ISO name" ), badged( m_isoName, [ this ]() { return m_isoName->text().trimmed().isEmpty(); } ) );
 
+    // a folder is at its default when it is blank or the same as the default the cloner reports
+    auto isDefaultDir = [ this ]( QLineEdit* edit, const char* defaultKey )
+    {
+        return [ this, edit, defaultKey ]()
+        {
+            const QString v = edit->text().trimmed();
+            return v.isEmpty() || ( defaultKey && v == m_status.value( QString::fromLatin1( defaultKey ) ) );
+        };
+    };
     m_workDir = new QLineEdit;
-    m_form->addRow( tr( "Work directory" ), withBrowse( m_workDir, false ) );
+    m_form->addRow( tr( "Work directory" ), badged( withBrowse( m_workDir, false ), isDefaultDir( m_workDir, "defaultWorkDir" ) ) );
     m_outputDir = new QLineEdit;
     m_outputDir->setPlaceholderText( tr( "the work directory" ) );
-    m_form->addRow( tr( "Output directory" ), withBrowse( m_outputDir, false ) );
+    m_form->addRow( tr( "Output directory" ), badged( withBrowse( m_outputDir, false ), isDefaultDir( m_outputDir, nullptr ) ) );
     m_cloneDir = new QLineEdit;
-    m_form->addRow( tr( "Clone directory" ), withBrowse( m_cloneDir, true ) );
+    m_form->addRow( tr( "Clone directory" ), badged( withBrowse( m_cloneDir, true ), isDefaultDir( m_cloneDir, "defaultCloneDir" ) ) );
 
     m_isoTag = new QLineEdit;
     m_isoTag->setPlaceholderText( QStringLiteral( "2026" ) );
     m_isoTag->setValidator( new QRegularExpressionValidator( QRegularExpression( QStringLiteral( "[^\\s\"']*" ) ), m_isoTag ) );
     connect( m_isoTag, &QLineEdit::textEdited, this, dirty );
-    m_form->addRow( tr( "ISO tag (volume label)" ), m_isoTag );
+    m_isoTagRow = badged( m_isoTag,
+                          [ this ]()
+                          {
+                              const QString v = m_isoTag->text().trimmed();
+                              return v.isEmpty() || v == QLatin1String( "2026" );
+                          } );
+    m_form->addRow( tr( "ISO tag (volume label)" ), m_isoTagRow );
 
     m_imageFormat = new QComboBox;
     m_imageFormat->addItem( tr( "squashfs (default)" ), QStringLiteral( "squashfs" ) );
     m_imageFormat->addItem( tr( "erofs" ), QStringLiteral( "erofs" ) );
-    m_form->addRow( tr( "Image type" ), m_imageFormat );
+    m_form->addRow( tr( "Image type" ),
+                    badged( m_imageFormat, [ this ]() { return m_imageFormat->currentData().toString() == QLatin1String( "squashfs" ); } ) );
 
     m_level = new QSpinBox;
     m_level->setRange( 1, 22 );
     m_level->setToolTip( tr( "Higher = smaller ISO, slower build. Default 3." ) );
-    m_form->addRow( tr( "zstd compression level" ), m_level );
+    m_levelRow = badged( m_level, [ this ]() { return m_level->value() == 3; } );
+    m_form->addRow( tr( "zstd compression level" ), m_levelRow );
 
     m_ramMode = new QCheckBox( tr( "Add a \"RAM mode\" boot entry (copies the system to RAM at boot)" ) );
-    m_form->addRow( QString(), m_ramMode );
+    m_form->addRow( QString(), badged( m_ramMode, [ this ]() { return m_ramMode->isChecked(); } ) );
     m_cleanCache = new QCheckBox( tr( "Leave package caches, /var/tmp and ~/.cache out of the image" ) );
-    m_form->addRow( QString(), m_cleanCache );
+    m_form->addRow( QString(), badged( m_cleanCache, [ this ]() { return m_cleanCache->isChecked(); } ) );
 
     connect( m_imageFormat,
              &QComboBox::currentIndexChanged,
@@ -951,8 +987,8 @@ BackupView::fillSettings()
             label->setVisible( visible );
         }
     };
-    showRow( m_isoTag, isArch() );
-    showRow( m_level, family != QLatin1String( "gentoo" ) );
+    showRow( m_isoTagRow, isArch() );
+    showRow( m_levelRow, family != QLatin1String( "gentoo" ) );
 
     // erofs only where the family supports it, and only selectable when mkfs.erofs + the kernel can do it
     auto* model = qobject_cast< QStandardItemModel* >( m_imageFormat->model() );
@@ -968,6 +1004,7 @@ BackupView::fillSettings()
 
     if ( m_settingsDirty )
     {
+        refreshSettingBadges();
         return;   // do not overwrite what the user is editing
     }
     const QSignalBlocker b1( m_imageFormat ), b2( m_level ), b3( m_ramMode ), b4( m_cleanCache );
@@ -983,7 +1020,29 @@ BackupView::fillSettings()
     m_level->setEnabled( m_imageFormat->currentIndex() == 0 );
     m_ramMode->setChecked( s.flag( QStringLiteral( "ramMode" ) ) );
     m_cleanCache->setChecked( s.flag( QStringLiteral( "cleanCache" ) ) );
-    m_settingsNote->setText( tr( "Blank fields use the defaults shown. Boot parameters for this distro: %1" ).arg( s.value( QStringLiteral( "bootParams" ) ) ) );
+    m_settingsNote->setText( tr( "Orange DEFAULT = the built-in default, green SET = your own value. Blank fields use the "
+                                 "defaults shown. Boot parameters for this distro: %1" )
+                                 .arg( s.value( QStringLiteral( "bootParams" ) ) ) );
+    refreshSettingBadges();
+}
+
+// Each setting's badge: orange DEFAULT or green SET
+void
+BackupView::refreshSettingBadges()
+{
+    for ( const auto& b : m_settingBadges )
+    {
+        const bool isDefault = b.second();
+        const QString state = isDefault ? QStringLiteral( "default" ) : QStringLiteral( "set" );
+        b.first->setText( isDefault ? tr( "DEFAULT" ) : tr( "SET" ) );
+        b.first->setToolTip( isDefault ? tr( "The built-in default" ) : tr( "Your own value" ) );
+        if ( b.first->property( "state" ).toString() != state )
+        {
+            b.first->setProperty( "state", state );
+            b.first->style()->unpolish( b.first );
+            b.first->style()->polish( b.first );
+        }
+    }
 }
 
 void

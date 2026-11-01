@@ -85,6 +85,7 @@ QPushButton#accent:hover { background: #3a1a20; }
 QPushButton#accent:disabled { background: #1d2027; border-color: #262a33; color: #5d626d; }
 QLabel[state="set"] { background: #2f7d4a; color: white; border-radius: 4px; padding: 2px 0; font-weight: 700; font-size: 8pt; }
 QLabel[state="missing"] { background: #b4232f; color: white; border-radius: 4px; padding: 2px 0; font-weight: 700; font-size: 8pt; }
+QLabel[state="default"] { background: #d97706; color: white; border-radius: 4px; padding: 2px 0; font-weight: 700; font-size: 8pt; }
 QLabel[state="optional"] { background: #2c303a; color: #aab1be; border-radius: 4px; padding: 2px 0; font-weight: 700; font-size: 8pt; }
 QLabel#readyBadge[state="ok"] { background: #2f7d4a; color: white; border-radius: 11px; padding: 3px 14px; font-weight: 700; }
 QLabel#readyBadge[state="bad"] { background: #b4232f; color: white; border-radius: 11px; padding: 3px 14px; font-weight: 700; }
