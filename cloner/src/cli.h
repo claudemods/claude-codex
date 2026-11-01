@@ -24,7 +24,9 @@ inline const std::vector<Command>& commands() {
         {"--set",               false, "KEY=VALUE ...  change saved settings (isoName, workDir, outputDir, level,\n"
                                        "                        ramMode, isoTag, cloneDir, imageFormat, cleanCache)"},
         {"--check-update",      false, "latest=<version> and newer=0|1"},
-        {"--build-iso",         true,  "build the ISO with the saved settings"},
+        {"--build-iso",         true,  "build the ISO with the saved settings (--console: plain output, no app markers)"},
+        {"--build-on-boot",     true,  "build the ISO on the next boot, from init, before the login screen"},
+        {"--cancel-boot-build", true,  "cancel a build set up with --build-on-boot"},
         {"--write-usb",         true,  "ISO DEVICE  write an ISO to a whole drive (erases it)"},
         {"--install-alpine",    true,  "DISK ext4|btrfs 0|1  Alpine live ISO: install the clone (1 = zstd:22)"},
         {"--mkinitcpio-config", true,  "Arch: put 11-dm-initramfs.rules in place"},
@@ -92,6 +94,8 @@ inline int printStatus() {
     kv("app", APP_NAME);
     kv("version", APP_VERSION);
     kv("release", APP_RELEASE);
+    kv("bootBuildSupported", b(bootbuild::supported()));
+    kv("bootBuildScheduled", b(bootbuild::scheduled()));
     kv("user", USERNAME);
     kv("distro", d.prettyName);
     kv("distroId", d.distroID);
@@ -215,7 +219,8 @@ inline int run(const Command& cmd, int argc, char* argv[]) {
     const std::string name = cmd.name;
     const std::vector<std::string> args = operands(argc, argv, cmd);
     loadConfig();
-    remaster::g_markers = true;
+    // the app reads "@@" markers; the boot build (--console) draws on the screen instead
+    remaster::g_markers = !hasFlag(argc, argv, "--console");
     if (cmd.root && hasFlag(argc, argv, "--cancel-on-eof")) cancelOnEof();
 
     auto result = [](bool ok) { remaster::marker(std::string("result ") + (ok ? "ok" : "fail")); return ok ? 0 : 1; };
@@ -241,6 +246,8 @@ inline int run(const Command& cmd, int argc, char* argv[]) {
     mkdirP(configDirPath());
     chownToUser(configDirPath());
     if (name == "--build-iso") return result(buildISO());
+    if (name == "--build-on-boot") return result(bootbuild::schedule(USERNAME));
+    if (name == "--cancel-boot-build") return result(bootbuild::cancel());
     if (name == "--write-usb") {
         if (args.size() != 2) { logError("--write-usb ISO DEVICE"); return result(false); }
         return result(writeIsoToDevice(args[0], args[1]));

@@ -226,13 +226,14 @@ without an installer. See [cccu/README.md](cccu/README.md) for all modes.
 
 ## Using it
 
-**Qt6 app** (`claudebackup-linux-qt6`, listed as *claudebackup linux* in the applications menu).
+**Qt6 app** (`claude-codex-backup-gui` / `claudebackup-linux-qt6`, listed as *Claude Codex Backup* in the applications menu).
 Run it as your user. It asks for the administrator password through polkit when a task needs it.
 
 - **Overview**: shows what is ready on this system (tools, boot files, ClaudeInstall, free
   space), with fix buttons, and quick actions
 - **Build ISO**: the build steps with live progress, a colour log, elapsed time and Cancel.
-  Cancel stops the running program and removes every mount.
+  Cancel stops the running program and removes every mount. **Build On Next Boot** sets the
+  build up to run from init instead (see below).
 - **Settings**: ISO name, work, output and clone directories, image type, zstd level, RAM-mode
   boot entry, package-cache cleaning. The terminal menu uses the same settings file.
 - **Edit Configs**: your own copies of GRUB, boot text and initramfs files, and ClaudeInstall's
@@ -245,7 +246,30 @@ Run it as your user. It asks for the administrator password through polkit when 
   and the log
 
 **Terminal menu**: `claudebackup-linux` works the same as before. *Launch Calamares* is now
-*Launch ClaudeInstall*.
+*Launch Claude Codex Install*.
+
+### Build the ISO from init (on the next boot)
+
+Like Claude Codex CCU's ISO build on reboot, Claude Codex Backup can build the ISO **at boot,
+before the login screen**. No desktop or apps are running then, so no files change while the
+system is copied, which gives a cleaner clone.
+
+| Where | How |
+|---|---|
+| Qt6 app | Build ISO page > **Build On Next Boot**. The same button then reads **Cancel Boot Build** |
+| Terminal menu | **Create Bootable ISO On Next Boot (from init)**. Select it again to cancel |
+| Command line | `sudo claude-codex-backup --build-on-boot` / `--cancel-boot-build` |
+
+On the next boot the one-shot service `claude-codex-backup-boot.service` takes the console
+(VT1) and builds the ISO with your saved settings, showing the progress live. The login screen
+waits for it.
+- **Success:** the PC reboots after a 5-second countdown.
+- **Failure:** the error stays on screen for 30 seconds, then the login screen starts. The log is
+  `/var/log/claudebackup-linux.log`.
+
+The service switches itself off *before* the build starts, and its files are left out of the
+image. So it runs exactly once, and neither the ISO nor systems installed from it ever build
+again by themselves. This needs systemd, so it isn't offered on Alpine or OpenRC Gentoo.
 
 **Batch commands**, for scripts and for the app: run `claudebackup-linux --help-batch` to list
 them. Examples: `--status`, `--build-iso`, `--write-usb ISO DEVICE`, `--set level=5`.

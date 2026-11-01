@@ -12,6 +12,7 @@
 #include <sys/ioctl.h>
 #include "remaster.h"
 #include "update.h"
+#include "bootbuild.h"
 
 // Interactive menu, same look and feel as the claudemods multi iso creator:
 // red ASCII banner, live clock, df line, checkbox status list, arrow-key navigation.
@@ -368,6 +369,9 @@ std::string guideText() {
     step(std::string("Setup > RAM Mode                  adds a ") + (arch ? "copytoram=y" : "toram") + " boot entry");
     step("Detected System And Build Steps   check it says 'Support: yes'");
     step("Create Bootable ISO               everything is unmounted at the end, even on Ctrl+C");
+    if (bootbuild::supported())
+        step("  ...or On Next Boot (from init)  built on VT1 before the login screen (nothing running);\n" +
+             pad + "reboots when the ISO is ready");
     if (alpine) step("Install Cloned System To Disk     (in the live ISO: this menu item, the Desktop shortcut\n" +
                      pad + "or '" + APP_BIN + " alpine') your clone back on a disk, not a\n" +
                      pad + "fresh Alpine: ext4 or btrfs, GRUB for UEFI or BIOS");
@@ -734,12 +738,42 @@ bool launchInstaller() {
 // ---------------------------------------------------------------------------
 // Main menu
 // ---------------------------------------------------------------------------
+// Main menu > Create Bootable ISO On Next Boot: the build runs from init (bootbuild.h), like Claude
+// Codex CCU's ISO build on reboot
+void bootBuildMenu() {
+    clearScreen();
+    std::cout << COLOR_CYAN << "Create Bootable ISO On Next Boot" << COLOR_RESET << "\n" << COLOR_GREEN
+              << "The ISO is built from init on the next boot: on the console (VT1), before the login screen,\n"
+              << "so no desktop or apps change files while the system is copied. The PC reboots when the\n"
+              << "ISO is ready; if the build fails, the login screen starts after 30 seconds.\n"
+              << COLOR_RESET << "\n";
+    if (!bootbuild::supported()) {
+        logError("Building at boot needs systemd, which this system does not run. Use Create Bootable ISO.");
+        pressAnyKey();
+        return;
+    }
+    if (bootbuild::scheduled()) {
+        std::string a = getUserInput("A build is already set up for the next boot. Cancel it? (y/N): ");
+        if (a == "y" || a == "Y") bootbuild::cancel();
+        pressAnyKey();
+        return;
+    }
+    std::string a = getUserInput("Build the ISO on the next boot with the current settings? (y/N): ");
+    if (a != "y" && a != "Y") { std::cout << COLOR_CYAN << "No changes made." << COLOR_RESET << std::endl; pressAnyKey(); return; }
+    if (!bootbuild::schedule(USERNAME)) { pressAnyKey(); return; }
+    std::string r = getUserInput("Reboot now? (y/N): ");
+    if (r == "y" || r == "Y") runCommand("systemctl reboot");
+    pressAnyKey();
+}
+
 std::vector<std::string> mainMenuItems() {
     return {
         "Guide",
         "Setup",
         "Detected System And Build Steps",
         "Create Bootable ISO",
+        bootbuild::scheduled() ? "Create Bootable ISO On Next Boot  [set up - select to cancel]"
+                               : "Create Bootable ISO On Next Boot (from init)",
         "Check Disk Usage",
         "Install ISO To USB",
         onFamily("alpine") ? "Install Cloned System To Disk" : "Launch " + INSTALLER_NAME,
@@ -817,24 +851,26 @@ bool resizeTerminal(int rows, int cols) {
 }
 
 void showMainMenu() {
-    std::vector<std::string> items = mainMenuItems();
     const bool alpine = onFamily("alpine");
     int selected = 0;
     while (true) {
+        // rebuilt every time: the boot build item says whether a build is set up
+        std::vector<std::string> items = mainMenuItems();
         int pick = pickFromMenu(APP_NAME + " main menu:", items, selected);
         switch (pick) {
             case 0: showGuide(); break;
             case 1: showSetupMenu(); break;
             case 2: showSystemInfo(); break;
             case 3: createISO(); break;
-            case 4: runCommand("df -h"); pressAnyKey(); break;
-            case 5: installISOToUSB(); break;
-            case 6:
+            case 4: bootBuildMenu(); break;
+            case 5: runCommand("df -h"); pressAnyKey(); break;
+            case 6: installISOToUSB(); break;
+            case 7:
                 if (alpine) installClonedSystem();
                 else { launchInstaller(); pressAnyKey(); }
                 break;
-            case 7: updateApp(); break;
-            case 8: return;
+            case 8: updateApp(); break;
+            case 9: return;
         }
     }
 }

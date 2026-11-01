@@ -42,6 +42,7 @@
 #include <QStandardItemModel>
 #include <QStandardPaths>
 #include <QStorageInfo>
+#include <QStyle>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -580,15 +581,20 @@ MainWindow::makeBuildPage()
 
     auto* buttons = new QHBoxLayout;
     m_buildButton = button( tr( "Build ISO" ), QStringLiteral( "media-record" ), "primary" );
+    m_bootBuild = button( tr( "Build On Next Boot" ), QStringLiteral( "system-reboot" ) );
+    m_bootBuild->setToolTip( tr( "Build the ISO from init on the next boot: on the console, before the login screen, "
+                                 "so nothing running changes files while the system is copied. The PC reboots when it is done." ) );
     m_openOutput = button( tr( "Open Output Folder" ), QStringLiteral( "folder-open" ) );
     m_toUsb = button( tr( "Write to USB..." ), QStringLiteral( "drive-removable-media" ) );
     buttons->addWidget( m_buildButton );
+    buttons->addWidget( m_bootBuild );
     buttons->addStretch( 1 );
     buttons->addWidget( m_openOutput );
     buttons->addWidget( m_toUsb );
     l->addLayout( buttons );
 
     connect( m_buildButton, &QPushButton::clicked, this, &MainWindow::startBuild );
+    connect( m_bootBuild, &QPushButton::clicked, this, &MainWindow::toggleBootBuild );
     connect( m_openOutput, &QPushButton::clicked, this, [ this ]() { QDesktopServices::openUrl( QUrl::fromLocalFile( isoOutputDir() ) ); } );
     connect( m_toUsb, &QPushButton::clicked, this, [ this ]() { goTo( Usb ); } );
 
@@ -623,6 +629,23 @@ MainWindow::makeBuildPage()
              this,
              [ this, mark ]( bool ok, bool )
              {
+                 if ( !m_buildIsIso )
+                 {
+                     // setting up / cancelling the boot build
+                     m_buildButton->setEnabled( true );
+                     m_bootBuild->setEnabled( true );
+                     refreshStatus();
+                     if ( ok && m_status.flag( QStringLiteral( "bootBuildScheduled" ) )
+                          && QMessageBox::question( this,
+                                                    tr( "Build On Next Boot" ),
+                                                    tr( "The ISO will be built on the next boot, before the login screen.\n\nReboot now?" ) )
+                              == QMessageBox::Yes )
+                     {
+                         QProcess::startDetached( QStringLiteral( "systemctl" ), { QStringLiteral( "reboot" ) } );
+                     }
+                     return;
+                 }
+                 m_bootBuild->setEnabled( true );
                  for ( int i = 0; i < m_stepList->count(); ++i )
                  {
                      if ( m_stepList->item( i )->text().startsWith( QStringLiteral( "▶" ) ) )
@@ -664,6 +687,20 @@ MainWindow::fillBuild()
                                        s.flag( QStringLiteral( "cleanCache" ) ) ? tr( "left out" ) : tr( "included" ),
                                        s.value( QStringLiteral( "effectiveCloneDir" ) ).toHtmlEscaped(),
                                        s.value( QStringLiteral( "effectiveWorkDir" ) ).toHtmlEscaped() ) );
+    // Build on the next boot (systemd only): the button sets it up or cancels it
+    const bool bootSet = s.flag( QStringLiteral( "bootBuildScheduled" ) );
+    m_bootBuild->setVisible( s.flag( QStringLiteral( "bootBuildSupported" ) ) );
+    m_bootBuild->setText( bootSet ? tr( "Cancel Boot Build" ) : tr( "Build On Next Boot" ) );
+    m_bootBuild->setObjectName( bootSet ? QStringLiteral( "danger" ) : QString() );
+    m_bootBuild->style()->unpolish( m_bootBuild );
+    m_bootBuild->style()->polish( m_bootBuild );
+    if ( bootSet )
+    {
+        m_buildSummary->setText( m_buildSummary->text()
+                                 + tr( "<br><span style='color:#e5c07b'><b>Next boot:</b> the ISO is built from init, before the login "
+                                       "screen, then the PC reboots.</span>" ) );
+    }
+
     // Keep the marks of the running or last build while the plan is the same (startBuild clears them)
     bool same = m_stepList->count() == m_plan.size();
     for ( int i = 0; same && i < m_plan.size(); ++i )
@@ -728,9 +765,58 @@ MainWindow::startBuild()
     {
         names << p.name;
     }
+    m_buildIsIso = true;
     if ( m_buildTask->start( tr( "Building the ISO" ), { QStringLiteral( "--build-iso" ) }, true, names ) )
     {
         m_buildButton->setEnabled( false );
+        m_bootBuild->setEnabled( false );
+    }
+}
+
+void
+MainWindow::toggleBootBuild()
+{
+    const bool scheduled = m_status.flag( QStringLiteral( "bootBuildScheduled" ) );
+    if ( scheduled )
+    {
+        if ( QMessageBox::question( this, tr( "Cancel Boot Build" ), tr( "Cancel the ISO build set up for the next boot?" ) ) != QMessageBox::Yes )
+        {
+            return;
+        }
+        m_buildIsIso = false;
+        if ( m_buildTask->start( tr( "Cancelling the boot build" ), { QStringLiteral( "--cancel-boot-build" ) }, false ) )
+        {
+            m_buildButton->setEnabled( false );
+            m_bootBuild->setEnabled( false );
+        }
+        return;
+    }
+    if ( !m_status.ok || !m_status.flag( QStringLiteral( "supported" ) ) || !m_status.value( QStringLiteral( "missingTools" ) ).isEmpty() )
+    {
+        QMessageBox::warning( this, tr( "Build On Next Boot" ), tr( "This system is not ready to build (see Overview)." ) );
+        return;
+    }
+    if ( m_settingsDirty
+         && QMessageBox::question( this, tr( "Build On Next Boot" ), tr( "The Settings page has unsaved changes. Save them first?" ) ) == QMessageBox::Yes )
+    {
+        saveSettings();
+    }
+    if ( QMessageBox::question( this,
+                                tr( "Build On Next Boot" ),
+                                tr( "On the next boot the whole system - users, passwords, settings and /home - is cloned into\n%1\n\n"
+                                    "It runs from init on the console, before the login screen, so nothing running changes files. "
+                                    "The PC reboots when the ISO is ready; if it fails, the login screen starts after 30 seconds.\n\nSet it up?" )
+                                    .arg( m_status.value( QStringLiteral( "isoPath" ) ) ) )
+         != QMessageBox::Yes )
+    {
+        return;
+    }
+    goTo( Build );
+    m_buildIsIso = false;
+    if ( m_buildTask->start( tr( "Setting up the build for the next boot" ), { QStringLiteral( "--build-on-boot" ) }, false ) )
+    {
+        m_buildButton->setEnabled( false );
+        m_bootBuild->setEnabled( false );
     }
 }
 

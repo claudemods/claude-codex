@@ -369,7 +369,12 @@ inline std::string generateExcludeList(const Context& c) {
         "boot/cbl-initrd.img",
         "etc/fstab", "etc/crypttab", "etc/mtab",
         "etc/udev/rules.d/70-persistent-cd.rules", "etc/udev/rules.d/70-persistent-net.rules",
-        "swapfile"
+        "swapfile",
+        // Claude Codex Backup's boot build (bootbuild.h): the clone must never build again by itself
+        "var/lib/claudebackup-linux/*",
+        "etc/systemd/system/claude-codex-backup-boot.service",
+        "etc/systemd/system/*/claude-codex-backup-boot.service",
+        "etc/systemd/system/*.d/10-claude-codex-backup.conf"
     }) ex.push_back(e);
 
     for (const auto& s : swapFilesFromFstab()) ex.push_back(s);

@@ -73,6 +73,7 @@ private:
 
     void goTo( Page page );
     void startBuild();
+    void toggleBootBuild();
     void saveSettings();
     void loadConfigItem( QListWidgetItem* item );
     bool confirmDiscardEdits();
@@ -105,6 +106,8 @@ private:
     QListWidget* m_stepList = nullptr;
     TaskPanel* m_buildTask = nullptr;
     QPushButton* m_buildButton = nullptr;
+    QPushButton* m_bootBuild = nullptr;     // build on the next boot, from init (or cancel it)
+    bool m_buildIsIso = false;              // the build task is an ISO build (not setting up the boot build)
     QPushButton* m_openOutput = nullptr;
     QPushButton* m_toUsb = nullptr;
 
