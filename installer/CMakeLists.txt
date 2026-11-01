@@ -683,8 +683,8 @@ endif()
 
 if(WITH_GUI)
     install(FILES claudeinstall.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-    # The icon named by "Icon=claudeinstall" in the desktop file: the mascot
-    install(FILES src/branding/default/mascot.svg
+    # The icon named by "Icon=claudeinstall" in the desktop file: the Claude Codex Install logo
+    install(FILES src/branding/default/logo.svg
             DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
             RENAME claudeinstall.svg)
 endif()

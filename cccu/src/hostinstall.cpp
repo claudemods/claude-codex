@@ -336,8 +336,14 @@ Result install_to_drive(Options o) {
     if (kernel_missing) {
         for (const auto& pkg : distro::kernel_packages(base.family, base.id)) generic.push_back(pkg);
     }
+    // Server mode is managed remotely: the host gets SSH (the container installs KRDP + SSH on its first boot)
+    if (o.display == Display::Server) generic.emplace_back("openssh");
     // Packages already installed in the new system are skipped; only the missing ones are installed.
     if (auto r = in_chroot(distro::install_missing_script(base.family, distro::map_packages(base.family, generic))); !r) return r;
+    if (o.display == Display::Server) {
+        const std::string unit = base.family == distro::Family::Debian ? "ssh.service" : "sshd.service";
+        if (auto r = in_chroot("systemctl enable " + unit); !r) warn("could not enable " + unit + " in the new system");
+    }
     if (from_iso) {
         step("Removing the live-system parts from the ISO system");
         if (auto r = in_chroot(distro::live_cleanup_script(base.family)); !r) return r;

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Claude Codex Backup: the Claude Codex "C" (as in Claude Codex CCU) around a disc - the live ISO -->
+  <rect width="128" height="128" rx="26" fill="#14161b"/>
+  <rect x="8" y="8" width="112" height="112" rx="20" fill="none" stroke="#2a3140" stroke-width="3"/>
+  <path d="M90 40a32 32 0 1 0 0 48" fill="none" stroke="#ff5a5f" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="64" cy="64" r="16" fill="#c8ccd4"/>
+  <circle cx="64" cy="64" r="16" fill="none" stroke="#8a909c" stroke-width="2"/>
+  <circle cx="64" cy="64" r="5" fill="#14161b"/>
+  <path d="M71 52a13 13 0 0 1 5 7" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.8"/>
+</svg>

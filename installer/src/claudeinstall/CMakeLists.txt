@@ -52,7 +52,7 @@ if(WITH_GUI)
     install(TARGETS claudeinstall_bin BUNDLE DESTINATION . RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
     install(
-        FILES ${CMAKE_SOURCE_DIR}/data/images/squid.svg
+        FILES ${CMAKE_SOURCE_DIR}/src/branding/default/logo.svg   # Claude Codex Install (was the Calamares squid)
         RENAME claudeinstall.svg
         DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
     )

@@ -11,6 +11,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <sstream>
+#include <utility>
 
 namespace cccu {
 namespace fs = std::filesystem;
@@ -234,7 +236,24 @@ void diagnose(const std::string& name) {
     info("Host side: systemctl status display-manager  /  journalctl -u cccu-firstboot");
 }
 
+// Server mode: how to reach the machine from another computer
+void print_remote_steps(const Options& o) {
+    info("");
+    info("Remote access (server mode):");
+    info("  The container installs KRDP (remote desktop) and SSH on its first boot - give it a few minutes");
+    info("  with network (follow it: incus exec " + o.name + " -- journalctl -u cccu-server-remote -f).");
+    info("  1. Remote desktop: open the container's Plasma once (the server's screen / BMC console), then");
+    info("     System Settings > Remote Desktop: switch it on and add a user name + password (RDP login,");
+    info("     separate from the account password). Then connect from any RDP client (Remmina, KRDC,");
+    info("     Windows Remote Desktop, xfreerdp) to  <server-ip>:3389");
+    info("  2. SSH to the host:           ssh <host-user>@<server-ip>");
+    info("     SSH into the container:    ssh -p 2222 <container-user>@<server-ip>");
+    info("  3. Firewall: allow TCP 3389 (RDP), 22 (host SSH) and 2222 (container SSH) - or use only SSH and");
+    info("     tunnel RDP through it:  ssh -L 3389:localhost:3389 <host-user>@<server-ip>  then RDP to localhost");
+}
+
 void print_next_steps(const Options& o, bool started) {
+    if (o.display == Display::Server) print_remote_steps(o);
     info("");
     if (o.display == Display::Session) {
         info("Log in to the host's SDDM and choose the session \"Container Plasma\":");
@@ -297,6 +316,22 @@ Result create_container(Options o) {
 
     // The desktop container comes up on every boot of the tty host.
     if (auto r = incus::set_config(o.name, "boot.autostart", "true"); !r) warn(r.error());
+
+    // Server mode is used remotely: the host forwards RDP (KRDP, 3389) and SSH (2222 -> the container's 22)
+    // into the container. The container installs KRDP and SSH itself on its first boot (rootfs.cpp).
+    if (o.display == Display::Server) {
+        step("Forwarding remote desktop (3389) and SSH (2222) into the container");
+        for (const auto& fwd : {std::pair<const char*, const char*>{"rdp", "listen=tcp:0.0.0.0:3389 connect=tcp:127.0.0.1:3389"},
+                                std::pair<const char*, const char*>{"ssh", "listen=tcp:0.0.0.0:2222 connect=tcp:127.0.0.1:22"}}) {
+            RunOptions quiet;
+            quiet.quiet = true;
+            run({"incus", "config", "device", "remove", o.name, fwd.first}, quiet);   // a leftover of an earlier run
+            std::vector<std::string> argv = {"incus", "config", "device", "add", o.name, fwd.first, "proxy"};
+            std::istringstream words(fwd.second);
+            for (std::string w; words >> w;) argv.push_back(w);
+            if (!run(argv).ok()) warn(std::string("could not add the ") + fwd.first + " forward (add it later with: incus config device add " + o.name + " " + fwd.first + " proxy " + fwd.second + ")");
+        }
+    }
     if (o.immutable) {
         if (auto r = make_immutable(o); !r) return r;
     }
@@ -341,8 +376,14 @@ Result setup_running_system(Options o) {
         else if (tool == "fsck.erofs") generic.push_back("erofs-utils");
         else generic.push_back(tool);
     }
+    // Server mode: the machine is managed remotely, so the host gets SSH too (the container gets KRDP + SSH)
+    if (o.display == Display::Server) generic.push_back("openssh");
     const std::string script = distro::install_missing_script(host.family, distro::map_packages(host.family, generic));
     if (!run({"bash", "-c", script}).ok()) return fail("could not install what the host needs");
+    if (o.display == Display::Server) {
+        const std::string unit = host.family == distro::Family::Debian ? "ssh.service" : "sshd.service";
+        if (!run({"systemctl", "enable", "--now", unit}).ok()) warn("could not enable " + unit + " on the host");
+    }
 
     if (!o.user.empty()) {
         const auto allowed = [](char c) { return std::islower(static_cast<unsigned char>(c)) || std::isdigit(static_cast<unsigned char>(c)) || c == '_' || c == '-'; };

@@ -120,6 +120,9 @@ std::vector<std::string> map_packages(Family family, const std::vector<std::stri
         {"pipewire", "pipewire", "pipewire", "pipewire", "pipewire"},
         {"pipewire-pulse", "pipewire-pulse", "pipewire-pulse", "pipewire-pulseaudio", "pipewire-pulseaudio"},
         {"wireplumber", "wireplumber", "wireplumber", "wireplumber", "wireplumber"},
+        // server mode: remote access
+        {"openssh", "openssh", "openssh-server", "openssh-server", "openssh"},
+        {"krdp", "krdp", "krdp", "krdp", "krdp"},
     };
     std::vector<std::string> out;
     for (const auto& name : generic) {
