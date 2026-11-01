@@ -1512,6 +1512,16 @@ void
 MainWindow::launchInstaller()
 {
     const QString launcher = m_status.value( QStringLiteral( "installerLauncher" ) );
+    // Only the terminal installer was built: it needs a terminal, which this window is not
+    if ( QStandardPaths::findExecutable( QStringLiteral( "claudeinstall" ) ).isEmpty()
+         && !QStandardPaths::findExecutable( QStringLiteral( "claudeinstall-tui" ) ).isEmpty() )
+    {
+        QMessageBox::information( this,
+                                  tr( "Install" ),
+                                  tr( "ClaudeInstall was built as the terminal installer only.\n\n"
+                                      "Use the \"Install\" shortcut on the Desktop, or run  claudebackup-install  in a terminal." ) );
+        return;
+    }
     bool started = false;
     if ( QFileInfo( launcher ).isExecutable() )
     {

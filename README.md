@@ -144,25 +144,41 @@ new and untested. Test every ISO in a virtual machine (UEFI) first.
 ```
 
 Run it as your normal user. It asks for the root password when it needs it (sudo, doas, run0,
-pkexec or su). It asks five questions: the image type (squashfs or erofs), whether to build
-ClaudeInstall, ext4 or btrfs zstd:22 as the installer's default filesystem, whether to build the
-Qt6 app, and whether to build CCCU. Then it:
+pkexec or su).
 
-1. installs the build and ISO tools for your distro (squashfs-tools, xorriso, mtools, ...)
-2. builds and installs `claudebackup-linux` (the cloner) and its polkit rule
-3. builds and installs `claudebackup-linux-qt6` (the app)
-4. builds and installs ClaudeInstall (clone mode, Qt6 GUI), then sets up `/etc/claudeinstall`
-   to install the clone from the live ISO
-5. builds and installs CCCU (`cccu` and `cccu-gui`). This only happens on Arch,
-   Debian, Fedora and openSUSE, and needs GCC 14+. If it fails, everything else is still
-   installed.
-6. puts an **Install &lt;distro&gt;** shortcut on the Desktop. The shortcut is part of the clone,
-   so it shows up on the live ISO's desktop too.
-7. starts the app
+**The questions** (press Enter for the default):
 
-Options: `--yes` (use the defaults, ask nothing), `--erofs`, `--btrfs` / `--ext4`,
-`--no-installer`, `--no-gui`, `--no-cccu`, `--no-launch`, `--installer-mode=clone|new|distro`,
-`--installer-tui`. Run `./build.sh help` to list them.
+| Question | Choices |
+|---|---|
+| Image type of the ISO | squashfs (default) / erofs |
+| Build ClaudeInstall? | yes (default) / no |
+| What ClaudeInstall installs | **the cloned system** (default; the live ISOs built here install themselves) / **a new system** (users, packages) / **claudemods distributions online** (pacstrap + profile, Arch only) |
+| ClaudeInstall's interface | **GUI** (Qt6 window, default) / **TUI** (terminal, `claudeinstall-tui`) / **both** |
+| Installed system's default filesystem (clone mode only) | ext4 (default) / btrfs zstd:22 |
+| Build the Qt6 app? | yes (default) / no |
+| Build CCCU? | yes (default) / no; asked on Arch, Debian, Fedora and openSUSE only |
+
+**What it does then**, in this order:
+
+1. **Packages** (as root): the build and ISO tools for your distro, plus the build dependencies of
+   each tool you picked
+2. **Build**, as you, with nothing installed yet:
+   1. the cloner `claudebackup-linux`
+   2. the Qt6 app `claudebackup-linux-qt6`
+   3. ClaudeInstall, in the mode and interface you picked
+   4. CCCU (`cccu` + `cccu-gui`, needs GCC 14+)
+
+   If a tool fails to build, it is skipped, and the error log is named. The cloner is the only
+   one that must build.
+3. **Install** (as root, one step): everything that built. In clone mode it then sets up
+   `/etc/claudeinstall` to install the clone from the live ISO.
+4. **Desktop shortcut** (clone mode): **Install &lt;distro&gt;**. It is part of the clone, so the
+   live ISO's desktop has it too, and it opens in a terminal if you picked the TUI only.
+5. **Start** the app
+
+Options skip the questions: `--erofs`, `--btrfs` / `--ext4`, `--no-installer`,
+`--installer-mode=clone|new|distro`, `--installer-ui=gui|tui|both`, `--no-gui`, `--no-cccu`,
+`--no-launch`. `--yes` answers every question with its default. Run `./build.sh help` to list them.
 
 ### One build script
 

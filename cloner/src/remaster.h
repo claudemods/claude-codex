@@ -140,7 +140,9 @@ inline bool installerAvailable(const Distro& d) { return d.supported() && d.fami
 
 // ClaudeInstall is installed and the compendium's build.sh has written its clone configuration
 inline bool installerReady() {
-    return commandExists(INSTALLER_BIN) && isRegularFile(INSTALLER_CONF_DIR + "/settings.conf") &&
+    // the Qt6 window (claudeinstall) or only the terminal installer (claudeinstall-tui)
+    return (commandExists(INSTALLER_BIN) || commandExists(INSTALLER_BIN + "-tui")) &&
+           isRegularFile(INSTALLER_CONF_DIR + "/settings.conf") &&
            isRegularFile(INSTALLER_CONF_DIR + "/modules/unpackfs.conf");
 }
 

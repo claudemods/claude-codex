@@ -49,15 +49,17 @@ merged into that script).
 
 ```bash
 cd ..                                      # the compendium folder
-./build.sh                                 # everything; ClaudeInstall in clone mode (installs the live ISO's clone)
+./build.sh                                 # asks: mode (clone / new / distro) and interface (GUI / TUI / both)
 ./build.sh --installer-mode=new            # new-system installer (users, packages)
 ./build.sh --installer-mode=distro         # claudemods distributions online (pacstrap + profile, Arch only)
-./build.sh --installer-tui                 # also build the terminal installer claudeinstall-tui
+./build.sh --installer-ui=tui              # terminal installer only (claudeinstall-tui); gui / both
 ./build.sh --no-cccu --no-gui              # only the cloner + ClaudeInstall
 ```
 
-The compendium's `build.sh` detects your distribution, installs ClaudeInstall's build
-dependencies, builds it with CMake/Ninja (keeping going after a failed file), installs it with its
+The compendium's `build.sh` asks which mode and interface to build (when the options above are not
+given), detects your distribution, installs ClaudeInstall's build dependencies, builds it with
+CMake/Ninja together with the other tools (keeping going after a failed file), then installs them
+all in one step, ClaudeInstall with its
 commands (`claudeconfig`, `claudeinstall-colors`, `claudeinstall-pkgfix`) and the claudemods
 presets, and sets up the chosen mode. Every compile error is written to `build/errors.log` (full
 output in `build/build.log`). Packaging (`fpm` / tarball) is no longer part of the script.
