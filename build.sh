@@ -1304,12 +1304,18 @@ if [ "$WANT_GUI" = 1 ]; then
     banner "BUILD 2/4  Claude Codex Cloner - the window (app/)"
     GEN=""
     if command -v ninja >/dev/null 2>&1 || command -v samu >/dev/null 2>&1; then GEN="-G Ninja"; fi
+    mkdir -p "$GUI_BUILD"
+    # shown live and kept in build-app/build.log; the error lines go to build-app/errors.log and are
+    # repeated on the Complete screen, so they do not scroll away
     # shellcheck disable=SC2086
-    if cmake -S "$GUI_SRC" -B "$GUI_BUILD" $GEN -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr &&
-       cmake --build "$GUI_BUILD" -j "$JOBS"; then
+    if run_logged "$GUI_BUILD/configure.log" cmake -S "$GUI_SRC" -B "$GUI_BUILD" $GEN -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr &&
+       run_logged "$GUI_BUILD/build.log" cmake --build "$GUI_BUILD" -j "$JOBS"; then
         GUI_OK=1; R_GUI=ok
+        rm -f "$GUI_BUILD/errors.log"
     else
         R_GUI=failed
+        cat "$GUI_BUILD/configure.log" "$GUI_BUILD/build.log" 2>/dev/null |
+            grep -E -A3 'error:|Error|CMake Error|undefined reference' > "$GUI_BUILD/errors.log" || true
     fi
 else
     banner "BUILD 2/4  Claude Codex Cloner (the window): skipped"
@@ -1375,7 +1381,13 @@ row "Claude Codex CCU"     "$R_CCU"     "$HOW_CCU"
 row "claude-codex"         ok           "claude-codex  (menu of everything)  /  claude-codex update  (update everything)"
 printf '\n'
 FAILED=0
-if [ "$R_GUI" = failed ]; then FAILED=1; say "Claude Codex Cloner: see the compiler messages above (build folder $GUI_BUILD)"; fi
+if [ "$R_GUI" = failed ]; then
+    FAILED=1
+    say "Claude Codex Cloner did not compile. The errors (all of them: $GUI_BUILD/errors.log, full output: build.log):"
+    printf '\033[0;91m'
+    head -n 40 "$GUI_BUILD/errors.log" 2>/dev/null
+    printf '\033[0m\n'
+fi
 if [ "$R_INSTALL" = failed ]; then FAILED=1; say "Claude Codex Install: every error in $IBUILD/errors.log (configure: configure.log, all output: build.log)"; fi
 if [ "$R_CCU" = failed ]; then FAILED=1; say "Claude Codex CCU: see the messages above (needs GCC 14+ / Clang 17+ and CMake 3.25+; build folder $CBUILD)"; fi
 printf '\033[0m'
