@@ -1,6 +1,51 @@
+<p align="center">
+<img src="https://i.postimg.cc/JhMRf2RZ/claudemods-03-17-2025.gif">
+
+<div align="center">
+
+  <a href="https://www.linux.org" target="_blank"><img src="https://img.shields.io/badge/OS-Linux-e06c75?style=for-the-badge&logo=linux" /></a>
+  <a href="https://isocpp.org" target="_blank"><img src="https://img.shields.io/badge/LANG-C++-00599C?style=for-the-badge&logo=cplusplus" /></a>
+  <a href="https://www.qt.io" target="_blank"><img src="https://img.shields.io/badge/GUI-Qt6-41CD52?style=for-the-badge&logo=qt&logoColor=white" /></a>
+  <a href="https://linuxcontainers.org/incus/" target="_blank"><img src="https://img.shields.io/badge/CONTAINERS-Incus-3b82f6?style=for-the-badge&logo=linuxcontainers&logoColor=white" /></a>
+  <a href="https://kde.org/plasma-desktop/" target="_blank"><img src="https://img.shields.io/badge/DESKTOP-KDE_Plasma-1d99f3?style=for-the-badge&logo=kde&logoColor=white" /></a>
+
+  <a href="https://archlinux.org" target="_blank"><img src="https://img.shields.io/badge/DISTRO-Arch-56b6c2?style=for-the-badge&logo=arch-linux" /></a>
+  <a href="https://ubuntu.com/" target="_blank"><img src="https://img.shields.io/badge/DISTRO-Ubuntu-E95420?style=for-the-badge&logo=Ubuntu" /></a>
+  <a href="https://www.debian.org" target="_blank"><img src="https://img.shields.io/badge/DISTRO-Debian-CE0058?style=for-the-badge&logo=Debian" /></a>
+  <a href="https://getfedora.org" target="_blank"><img src="https://img.shields.io/badge/DISTRO-Fedora-51A2DA?style=for-the-badge&logo=fedora" /></a>
+  <a href="https://www.opensuse.org" target="_blank"><img src="https://img.shields.io/badge/DISTRO-openSUSE-73BA25?style=for-the-badge&logo=opensuse" /></a>
+  <a href="https://linuxmint.com" target="_blank"><img src="https://img.shields.io/badge/DISTRO-Linux_Mint-87CF3E?style=for-the-badge&logo=linuxmint&logoColor=white" /></a>
+  <a href="https://alpinelinux.org" target="_blank"><img src="https://img.shields.io/badge/DISTRO-Alpine-0D597F?style=for-the-badge&logo=alpine-linux" /></a>
+  <a href="https://www.gentoo.org" target="_blank"><img src="https://img.shields.io/badge/DISTRO-Gentoo-54487A?style=for-the-badge&logo=gentoo" /></a>
+
+  <a href="https://claude.com/claude-code" target="_blank">
+    <img src="https://img.shields.io/badge/Built_Using-Claude_Code-D97757?style=for-the-badge&logo=claude&logoColor=white" alt="Built Using Claude Code">
+  </a>
+
+  ## [ Guide ](#quick-start)
+
+  ## [ Support Me ](https://www.paypal.com/paypalme/claudemods?country.x=GB&locale)
+
+</div>
+
+<div align="center">
+
+  [![Ko-Fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&label=claudemods&color=3399FF&Linux&logo=ko-fi&logoColor=white)](https://ko-fi.com/claudemods)
+  [![GitHub Sponsors](https://img.shields.io/badge/sponsor-30363D?style=for-the-badge&label=claudemods&color=A836FF&logo=GitHub-Sponsors&logoColor=#white)](https://github.com/sponsors/claudemods)
+
+</div>
+
+<div align="center">
+
 # Claude Codex — Compendium v1.0
 
 **Version:** Compendium v1.0 · **Date:** 01-11-2026
+
+<p align="center"> Sailing the 7 seas like Penguin's Eggs, Remastersys, Refracta, Systemback and father Knoppix! </p>
+
+![C++](https://img.shields.io/badge/C++-17%20%2F%2023-blue) ![Qt](https://img.shields.io/badge/Qt-6-green) ![Status](https://img.shields.io/badge/status-beta-orange) ![License](https://img.shields.io/badge/license-MIT-green)
+
+</div>
 
 Clone your running Linux system into a bootable live ISO or into an Incus container, and install
 the clone back onto a disk from the live ISO, with one build script.
@@ -206,3 +251,11 @@ first: installing erases the target disk.
 
 Logs: `/var/log/claudebackup-linux.log` (cloner), `/tmp/claudebackup-install-<uid>.log`
 (installer launcher), and ClaudeInstall's session log.
+
+---
+
+<div align="center">
+
+**[ Support Me ](https://www.paypal.com/paypalme/claudemods?country.x=GB&locale)** · [claudemodsreloaded.co.uk](https://www.claudemodsreloaded.co.uk)
+
+</div>
