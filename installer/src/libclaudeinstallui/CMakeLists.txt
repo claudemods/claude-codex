@@ -50,7 +50,7 @@ claudeinstall_add_library(claudeinstallui
     RESOURCES libclaudeinstallui.qrc
     EXPORT ClaudeInstall
     UI
-        utils/ErrorDialog/ErrorDialog.ui
+        widgets/ErrorDialog.ui
     VERSION ${CLAUDEINSTALL_VERSION_SHORT}
     SOVERSION ${CLAUDEINSTALL_SOVERSION}
 )

@@ -263,6 +263,14 @@ kept in `/etc/claudeinstall.orig`.
 - The cloner has new batch commands that the Qt6 app runs, plus `@@step` progress markers for
   the app.
 - `--write-usb` refuses any drive that holds the running system.
+- ClaudeInstall source fixes (both were broken in the original `claudeinstall-linux-main` as well):
+  - The partition module was split across `src/modules/`: `jobs/`, `PartitionViewStep`,
+    `PartitionTuiStep` and `partition.schema.yaml` were loose there, next to older copies of
+    `Config.cpp`/`.h` and `partition.conf`. They are now back in `src/modules/partition/`. The
+    newer copies were kept, and the old loose duplicates and the duplicate `tests/` folder were
+    removed.
+  - `src/libclaudeinstallui/CMakeLists.txt` pointed at `utils/ErrorDialog/ErrorDialog.ui`, which
+    does not exist. It now points at `widgets/ErrorDialog.ui`, where the file and its `.cpp` are.
 - CCCU no longer ships an engine copy, `provision.sh` or Calamares zips. Its `cccu-iso-engine`
   is built from `cloner/src`, and its in-container provisioning uses the compendium's
   `build.sh` (`--root-phase`, then `--container-installer`).

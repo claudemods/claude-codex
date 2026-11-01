@@ -992,7 +992,7 @@ for a in "$@"; do
 done
 
 for d in "$CLONER/Makefile" "$GUI_SRC/CMakeLists.txt" "$INSTALLER/CMakeLists.txt" "$CCCU_SRC/CMakeLists.txt"; do
-    [ -f "$d" ] || die "$d not found - keep build.sh in the claude-codex-compendium folder"
+    [ -f "$d" ] || die "$d not found - run build.sh from the full claude-codex-compendium folder (cloner/, cloner-qt6/, installer/, cccu/ next to it). A 'fixes' folder only holds changed files and cannot build on its own."
 done
 [ "$(uname -s)" = "Linux" ] || die "this project only builds on Linux"
 detect_family
