@@ -1,6 +1,6 @@
 # build output
 /cloner/claudebackup-linux
-/build-qt6/
+/build-app/
 /installer/build/
 /installer/build-helper/
 /installer/build.config

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- Claude Codex Cloner runs these through pkexec: one password prompt, then kept for a few minutes.
+     Installed by the compendium's build.sh (the cloner's own rule, org.claudemods.claudebackup, comes
+     with cloner/). -->
+<policyconfig>
+  <vendor>claudemods</vendor>
+  <vendor_url>https://github.com/claudemods/claude-codex</vendor_url>
+
+  <action id="org.claudemods.claude-codex.ccu">
+    <description>Run Claude Codex CCU (the Container Creator Utility)</description>
+    <message>Claude Codex CCU needs administrator rights to create, install and manage containers</message>
+    <icon_name>claude-codex-cloner</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/bin/cccu</annotate>
+  </action>
+
+  <action id="org.claudemods.claude-codex.update">
+    <description>Update Claude Codex</description>
+    <message>Updating Claude Codex rebuilds and reinstalls every tool and needs administrator rights</message>
+    <icon_name>claude-codex-cloner</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/bin/claude-codex</annotate>
+  </action>
+</policyconfig>

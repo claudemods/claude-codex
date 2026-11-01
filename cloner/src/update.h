@@ -76,8 +76,18 @@ inline std::string statusText() {
     return "";
 }
 
-// Downloads the main branch source, builds and installs it. True when /usr/bin has the new build.
+// The suite's updater (claude-codex update): updates every Claude Codex tool together, with the
+// choices of the last build.sh run. Installed by build.sh next to the cloner.
+const std::string SUITE_UPDATER = "/usr/local/bin/claude-codex";
+
+// Updates to the latest release. With the suite's updater the whole compendium is rebuilt (so the
+// cloner, the installer, CCU and the window stay the same release); without it only the cloner is.
+// True when the new build is installed.
 inline bool downloadBuildInstall() {
+    if (access(SUITE_UPDATER.c_str(), X_OK) == 0) {
+        logNormal("Updating the whole Claude Codex suite (" + SUITE_UPDATER + " update)");
+        return runCommand(shq(SUITE_UPDATER) + " update --yes") == 0;
+    }
     const std::string dir = STAGING_DIR + "/update";
     runCommand("rm -rf " + shq(dir));
     mkdirP(dir);

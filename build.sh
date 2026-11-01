@@ -1,25 +1,28 @@
 #!/bin/sh
 # build.sh - Claude Codex Compendium v1.0 01-11-2026, in one go:
-#   Claude Codex Backup  (the cloner claudebackup-linux + its Qt6 app claudebackup-linux-qt6)
+#   Claude Codex Backup  (the cloner claudebackup-linux: terminal menu + batch commands)
+#   Claude Codex Cloner  (the one Qt6 window claude-codex-cloner: Backup, Containers, Updates, Guide)
 #   Claude Codex Install (the installer, ClaudeInstall: claudeinstall / claudeinstall-tui)
-#   Claude Codex CCU     (the Container Creator Utility: cccu / cccu-gui)
+#   Claude Codex CCU     (the Container Creator Utility: cccu)
+#   claude-codex         (the one command: menu, every tool, status, update)
 #   1. detects the distro
 #   2. installs the build tools and the host tools the ISO build uses (per distro)
 #   3. builds and installs the cloner (cloner/, terminal menu + batch commands)
-#   4. builds and installs the Qt6 app (cloner-qt6/)
+#   4. builds and installs Claude Codex Cloner, the window (app/)
 #   5. builds and installs Claude Codex Install (installer/) and configures it to install the CLONE from
 #      the live ISO (unpacks its squashfs/erofs image; no users page - the clone keeps its users).
 #      Alpine has no Claude Codex Install here: the live ISO gets the cloner's own "Install Cloned System
 #      To Disk" instead (its tools are installed in step 2).
 #   6. builds and installs CCCU (cccu/: clone this system into an Incus container; its "Create ISO"
 #      uses the same cloner engine and Claude Codex Install) - Arch, Debian, Fedora, openSUSE; needs GCC 14+
-#   7. puts an "Install <distro>" shortcut on the Desktop (it is part of the clone, so the live
-#      ISO's desktop has it), then shows what was built and how to start each tool (it starts nothing)
+#   7. installs claude-codex, keeps your answers in /etc/claude-codex/build.conf (claude-codex update
+#      reuses them), puts an "Install <distro>" shortcut on the Desktop (it is part of the clone, so the
+#      live ISO's desktop has it), then shows what was built and how to start each tool (it starts nothing)
 # Plain POSIX sh, so it also runs on a stock Alpine (sh build.sh) without bash.
 #
 #   ./build.sh                 everything, asking a few questions
 #   ./build.sh --yes           everything with the defaults, no questions
-#   ./build.sh --no-installer  skip Claude Codex Install          ./build.sh --no-gui   skip the Qt6 app
+#   ./build.sh --no-installer  skip Claude Codex Install          ./build.sh --no-gui   skip the window
 #   ./build.sh --btrfs         installer default: btrfs zstd:22 (instead of ext4)
 #   ./build.sh --erofs         image type erofs (instead of squashfs)
 #   ./build.sh --no-cccu       skip CCCU (the container creator)
@@ -31,17 +34,18 @@
 #                              Claude Codex Install's interface (asked when not given): Qt6 window, terminal
 #                              (claudeinstall-tui) or both. --installer-tui = both
 #   ./build.sh help            this text
+# Later: claude-codex update  (downloads the latest release and runs this script again with your answers)
 set -e
 
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 SUITE="$(dirname "$SELF")"
 CLONER="$SUITE/cloner"
-GUI_SRC="$SUITE/cloner-qt6"
-GUI_BUILD="$SUITE/build-qt6"
+GUI_SRC="$SUITE/app"
+GUI_BUILD="$SUITE/build-app"
 INSTALLER="$SUITE/installer"
 CCCU_SRC="$SUITE/cccu"
 TARGET="claudebackup-linux"
-GUI_TARGET="claudebackup-linux-qt6"
+GUI_TARGET="claude-codex-cloner"
 
 # Messages are light green (like the app's [ccb] lines), the output of the commands after them is
 # dark green; "==>" and errors are red. say() leaves the terminal dark green for the commands' output.
@@ -244,9 +248,9 @@ install_host_tools() {
     esac
 }
 
-# Qt6 Widgets + CMake for the app (cloner-qt6/)
+# Qt6 Widgets + CMake for the window (app/)
 install_gui_deps() {
-    say "Installing Qt6 and CMake for the claudebackup app"
+    say "Installing Qt6 and CMake for Claude Codex Cloner (the window)"
     case "$FAMILY" in
         debian)   apt-get install -y cmake qt6-base-dev ;;
         arch)     pacman -S --needed --noconfirm cmake qt6-base ;;
@@ -363,7 +367,7 @@ root_phase() {
         install_installer_runtime
         install_claudeinstall_deps
     fi
-    if [ "${5:-0}" = 1 ]; then install_cccu_deps "$4"; fi
+    if [ "${5:-0}" = 1 ]; then install_cccu_deps; fi
 }
 
 # =============================================================================
@@ -861,6 +865,9 @@ install_claudeinstall() {
     for c in claudeconfig claudeinstall-colors claudeinstall-pkgfix; do
         install -Dm755 "$INSTALLER/$c" "/usr/bin/$c"
     done
+    # Claude Codex Install's own icon (the GUI's CMake installs it too; a terminal-only build needs it
+    # for the "Install <distro>" shortcut) - not the Calamares squid
+    install -Dm644 "$INSTALLER/src/branding/default/logo.svg" /usr/share/icons/hicolor/scalable/apps/claudeinstall.svg
     for pf in "$INSTALLER"/config/*/settings.conf "$INSTALLER"/config/*/modules/*.conf; do
         [ -f "$pf" ] || continue
         install -Dm644 "$pf" "/usr/share/claudeinstall/presets/${pf#"$INSTALLER"/config/}"
@@ -904,26 +911,22 @@ install_claudeinstall() {
 # =============================================================================
 CBUILD="$CCCU_SRC/build"
 
-# Root: CCCU's build and runtime tools ($1 = 1 with the Qt6 window cccu-gui). Incus itself is
-# installed later by CCCU when it sets up a host.
+# Root: CCCU's build and runtime tools. Incus itself is installed later by CCCU when it sets up a host;
+# its window is the Containers tab of Claude Codex Cloner (Qt6 comes with install_gui_deps).
 install_cccu_deps() {
     say "Installing CCCU's build dependencies"
     case "$FAMILY" in
         arch)
-            pacman -S --needed --noconfirm base-devel cmake curl rsync tar zstd squashfs-tools parted dosfstools e2fsprogs btrfs-progs
-            [ "$1" = 1 ] && pacman -S --needed --noconfirm qt6-base polkit ;;
+            pacman -S --needed --noconfirm base-devel cmake curl rsync tar zstd squashfs-tools parted dosfstools e2fsprogs btrfs-progs polkit ;;
         debian)
             apt-get update
             apt-get install -y build-essential cmake curl rsync tar zstd squashfs-tools parted dosfstools e2fsprogs btrfs-progs
-            [ "$1" = 1 ] && apt-get install -y qt6-base-dev
             # CCCU is C++23: older releases need g++-14 next to the default compiler
             cccu_compiler >/dev/null || apt-get install -y g++-14 || true ;;
         fedora)
-            dnf install -y gcc-c++ make cmake curl rsync tar zstd squashfs-tools parted dosfstools e2fsprogs btrfs-progs glibc-static
-            [ "$1" = 1 ] && dnf install -y qt6-qtbase-devel polkit ;;
+            dnf install -y gcc-c++ make cmake curl rsync tar zstd squashfs-tools parted dosfstools e2fsprogs btrfs-progs glibc-static polkit ;;
         opensuse)
-            zypper --non-interactive install gcc-c++ make cmake curl rsync tar zstd squashfs parted dosfstools e2fsprogs btrfsprogs glibc-devel-static
-            [ "$1" = 1 ] && zypper --non-interactive install qt6-base-devel polkit ;;
+            zypper --non-interactive install gcc-c++ make cmake curl rsync tar zstd squashfs parted dosfstools e2fsprogs btrfsprogs glibc-devel-static polkit ;;
     esac
     return 0
 }
@@ -943,8 +946,8 @@ cccu_compiler() {
     return 1
 }
 
-# User: build cccu (+ cccu-gui with $1 = 1). The ISO boot files of the non-Arch families are fetched
-# once into cccu/resources and carried inside cccu.
+# User: build cccu. The ISO boot files of the non-Arch families are fetched once into cccu/resources
+# and carried inside cccu.
 build_cccu() {
     CXX_FOUND=$(cccu_compiler) || { say "CCCU needs GCC 14+ or Clang 17+ (C++23); this system's compiler is too old"; return 1; }
     say "Compiler for CCCU: $CXX_FOUND"
@@ -958,29 +961,29 @@ build_cccu() {
             say "Could not download the ISO boot files; 'cccu iso' then downloads them inside the container"
         fi
     fi
-    CGUI=OFF
-    [ "$1" = 1 ] && CGUI=ON
-    cmake -S "$CCCU_SRC" -B "$CBUILD" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER="$CXX_FOUND" -DCCCU_BUILD_GUI="$CGUI" &&
+    cmake -S "$CCCU_SRC" -B "$CBUILD" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER="$CXX_FOUND" &&
         cmake --build "$CBUILD" -j "$(nproc 2>/dev/null || echo 2)"
 }
 
-# Root: install cccu (/usr/local/bin) and, with the GUI, its menu entry and icon
+# Root: install cccu (/usr/local/bin/cccu; the polkit rule for it comes with install_suite)
 install_cccu() {
     cmake --install "$CBUILD" || return 1
-    if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database >/dev/null 2>&1 || true; fi
-    if command -v gtk-update-icon-cache >/dev/null 2>&1; then gtk-update-icon-cache -q /usr/local/share/icons/hicolor 2>/dev/null || true; fi
+    # the separate CCU window of earlier releases: now the Containers tab of Claude Codex Cloner
+    rm -f /usr/local/bin/cccu-gui /usr/local/share/applications/cccu.desktop /usr/local/share/icons/hicolor/scalable/apps/cccu.svg
 }
 
 # =============================================================================
 # Phase 2 of a normal run, as root: install everything phase 1 built, then configure.
-# $1 qt6 app built (1/0), $2 Claude Codex Install built (1/0), $3 its mode (clone|new|distro),
-# $4 btrfs default (1/0), $5 erofs image (1/0), $6 CCCU built (1/0)
+# $1 the window built (1/0), $2 Claude Codex Install built (1/0), $3 its mode (clone|new|distro),
+# $4 btrfs default (1/0), $5 erofs image (1/0), $6 CCCU built (1/0), $7 this run's answers as options
 # =============================================================================
 install_all() {
     say "[install] Claude Codex Backup ($TARGET)"
     make -C "$CLONER" install || return 1
+    # the separate Backup window of earlier releases: now the Backup tab of Claude Codex Cloner
+    rm -f /usr/bin/claudebackup-linux-qt6 /usr/share/applications/claudebackup-linux-qt6.desktop
     if [ "$1" = 1 ]; then
-        say "[install] Claude Codex Backup Qt6 app ($GUI_TARGET)"
+        say "[install] Claude Codex Cloner ($GUI_TARGET: Backup, Containers, Updates, Guide)"
         cmake --install "$GUI_BUILD" || return 1
     fi
     if [ "$2" = 1 ]; then
@@ -995,15 +998,42 @@ install_all() {
         install_cccu || return 1
     fi
     install_codex_commands
+    install_suite "${7:-}"
+}
+
+# Root: claude-codex (the one command), the polkit rule for the window's tasks, the release file, and
+# this run's answers (claude-codex update runs build.sh again with them). $1 = the answers as options
+install_suite() {
+    say "[install] claude-codex (menu, every tool, status, update)"
+    install -Dm755 "$SUITE/claude-codex" /usr/local/bin/claude-codex
+    install -Dm644 "$SUITE/share/org.claudemods.claude-codex.policy" /usr/share/polkit-1/actions/org.claudemods.claude-codex.policy
+    mkdir -p /usr/share/claude-codex /etc/claude-codex
+    {
+        echo "release=$(cat "$SUITE/RELEASE" 2>/dev/null || echo 'Compendium v1.0 01-11-2026')"
+        echo "version=$(cat "$SUITE/VERSION" 2>/dev/null || echo 1.0)"
+        echo "built=$(date '+%Y-%m-%d %H:%M')"
+        echo "source=$SUITE"
+    } > /usr/share/claude-codex/release
+    if [ -n "$1" ]; then
+        printf '# Written by build.sh: its answers, reused by claude-codex update. Run ./build.sh to change them.\nFLAGS="%s"\n' "$1" > /etc/claude-codex/build.conf
+        say "  your answers ($1) are kept in /etc/claude-codex/build.conf"
+    fi
+    if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database -q 2>/dev/null || true; fi
+    for d in /usr/share/icons/hicolor /usr/local/share/icons/hicolor; do
+        if [ -d "$d" ] && command -v gtk-update-icon-cache >/dev/null 2>&1; then gtk-update-icon-cache -q -t "$d" 2>/dev/null || true; fi
+    done
+    return 0
 }
 
 # claude-codex-* commands next to the original ones (links in /usr/local/bin), for the tools that
-# are installed; a link whose tool is not installed is removed
+# are installed; a link whose tool is not installed is removed. The window is claude-codex-cloner itself.
 install_codex_commands() {
     say "[install] claude-codex-* commands"
-    for pair in claude-codex-backup:claudebackup-linux claude-codex-backup-gui:claudebackup-linux-qt6 \
+    # the two windows of earlier releases are one now (claude-codex-cloner)
+    rm -f /usr/local/bin/claude-codex-backup-gui /usr/local/bin/claude-codex-ccu-gui
+    for pair in claude-codex-backup:claudebackup-linux \
                 claude-codex-install:claudeinstall claude-codex-install-tui:claudeinstall-tui \
-                claude-codex-ccu:cccu claude-codex-ccu-gui:cccu-gui; do
+                claude-codex-ccu:cccu; do
         CMD=${pair%%:*}; REAL=${pair#*:}
         rm -f "/usr/local/bin/$CMD"
         TARGET_PATH=$(command -v "$REAL" 2>/dev/null) || continue
@@ -1017,7 +1047,7 @@ install_codex_commands() {
 add_desktop_shortcut() {
     if [ "$FAMILY" = alpine ]; then
         COMMENT="Install this cloned system to a disk ($TARGET alpine)"
-        ICON=drive-harddisk
+        ICON=claude-codex-backup
         if command -v konsole >/dev/null 2>&1; then EXEC="konsole --hold -e $TARGET alpine"; IN_TERMINAL=false
         else EXEC="$TARGET alpine"; IN_TERMINAL=true; fi
     else
@@ -1025,8 +1055,8 @@ add_desktop_shortcut() {
         ICON=claudeinstall
         EXEC=/usr/local/bin/claudebackup-install
         IN_TERMINAL=false
-        # only the terminal installer was built: open the shortcut in a terminal
-        if ! command -v claudeinstall >/dev/null 2>&1; then IN_TERMINAL=true; ICON=utilities-terminal; fi
+        # only the terminal installer was built: open the shortcut in a terminal (same icon)
+        if ! command -v claudeinstall >/dev/null 2>&1; then IN_TERMINAL=true; fi
     fi
 
     ENTRY="[Desktop Entry]
@@ -1093,7 +1123,7 @@ case "${1:-}" in
 esac
 
 # =============================================================================
-# User phase: questions, root phase, build, install, launch
+# User phase: questions, root phase, build, install, the Complete screen (nothing is started)
 # =============================================================================
 ASSUME_YES=0; WANT_INSTALLER=""; WANT_GUI=1; WANT_BTRFS=""; WANT_EROFS=0; WANT_CCCU=1
 IMODE=""; IUI=""   # Claude Codex Install's mode and interface: asked below unless given
@@ -1119,8 +1149,8 @@ for a in "$@"; do
     esac
 done
 
-for d in "$CLONER/Makefile" "$GUI_SRC/CMakeLists.txt" "$INSTALLER/CMakeLists.txt" "$CCCU_SRC/CMakeLists.txt"; do
-    [ -f "$d" ] || die "$d not found - run build.sh from the full claude-codex-compendium folder (cloner/, cloner-qt6/, installer/, cccu/ next to it). A 'fixes' folder only holds changed files and cannot build on its own."
+for d in "$CLONER/Makefile" "$GUI_SRC/CMakeLists.txt" "$INSTALLER/CMakeLists.txt" "$CCCU_SRC/CMakeLists.txt" "$SUITE/claude-codex"; do
+    [ -f "$d" ] || die "$d not found - run build.sh from the full claude-codex-compendium folder (app/, cloner/, installer/, cccu/ and claude-codex next to it). A 'fixes' folder only holds changed files and cannot build on its own."
 done
 [ "$(uname -s)" = "Linux" ] || die "this project only builds on Linux"
 detect_family
@@ -1215,13 +1245,13 @@ elif [ "$WANT_INSTALLER" = 1 ] || { [ "$WANT_INSTALLER" != 0 ] && ask "Build Cla
     say "Claude Codex Install: $IMODE mode, $IUI interface"
 fi
 IMODE="${IMODE:-clone}"; IUI="${IUI:-gui}"
-if [ "$WANT_GUI" = 1 ] && ! ask "Build the Qt6 app (claudebackup-linux-qt6)? [Y/n]" y; then WANT_GUI=0; fi
+if [ "$WANT_GUI" = 1 ] && ! ask "Build Claude Codex Cloner, the window (Backup, Containers, Updates, Guide)? [Y/n]" y; then WANT_GUI=0; fi
 # CCCU supports the families with systemd and an Incus package
 case "$FAMILY" in
     arch|debian|fedora|opensuse) ;;
     *) [ "$WANT_CCCU" = 1 ] && say "CCCU (containers) does not support $DISTRO_NAME - skipping it"; WANT_CCCU=0 ;;
 esac
-if [ "$WANT_CCCU" = 1 ] && ! ask "Build CCCU, to clone this system into Incus containers? [Y/n]" y; then WANT_CCCU=0; fi
+if [ "$WANT_CCCU" = 1 ] && ! ask "Build Claude Codex CCU, to clone this system into Incus containers? [Y/n]" y; then WANT_CCCU=0; fi
 
 # The user whose Desktop gets the shortcut (also when build.sh itself was started through sudo/doas)
 DESK_USER=""
@@ -1230,7 +1260,29 @@ if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-${DOAS_USER:-}}" ]; then
     DESK_USER="${SUDO_USER:-$DOAS_USER}"
     DESK_HOME=$(awk -F: -v u="$DESK_USER" '$1 == u { print $6 }' /etc/passwd)
     [ -n "$DESK_HOME" ] || DESK_HOME="/home/$DESK_USER"
+elif [ "$(id -u)" -eq 0 ] && [ -n "${PKEXEC_UID:-}" ]; then
+    # claude-codex update from the window (pkexec)
+    DESK_USER=$(awk -F: -v u="$PKEXEC_UID" '$3 == u { print $1 }' /etc/passwd)
+    DESK_HOME=$(awk -F: -v u="$PKEXEC_UID" '$3 == u { print $6 }' /etc/passwd)
+    [ -n "$DESK_HOME" ] || { DESK_USER=""; DESK_HOME="$HOME"; }
 fi
+
+# This run's answers as options: claude-codex update runs build.sh --yes with them
+FLAGS=""
+if [ "$FAMILY" != alpine ]; then
+    if [ "$INSTALLER_ON" = 1 ]; then
+        FLAGS="--installer-mode=$IMODE --installer-ui=$IUI"
+        if [ "$IMODE" = clone ]; then
+            if [ "$BTRFS" = 1 ]; then FLAGS="$FLAGS --btrfs"; else FLAGS="$FLAGS --ext4"; fi
+        fi
+    else
+        FLAGS="--no-installer"
+    fi
+fi
+[ "$IMAGE" = erofs ] && FLAGS="$FLAGS --erofs"
+[ "$WANT_GUI" = 1 ] || FLAGS="$FLAGS --no-gui"
+[ "$WANT_CCCU" = 1 ] || FLAGS="$FLAGS --no-cccu"
+FLAGS="${FLAGS# }"
 
 say "Installing packages as root"
 as_root sh "$SELF" --root-phase "$FAMILY" "$INSTALLER_ON" "$ALPINE_TOOLS" "$WANT_GUI" "$WANT_CCCU"
@@ -1249,7 +1301,7 @@ banner "BUILD 1/4  Claude Codex Backup - the cloner (cloner/)"
 make -C "$CLONER" -j"$JOBS" || die "Claude Codex Backup (the cloner) did not build - see the messages above"
 
 if [ "$WANT_GUI" = 1 ]; then
-    banner "BUILD 2/4  Claude Codex Backup - the Qt6 app (cloner-qt6/)"
+    banner "BUILD 2/4  Claude Codex Cloner - the window (app/)"
     GEN=""
     if command -v ninja >/dev/null 2>&1 || command -v samu >/dev/null 2>&1; then GEN="-G Ninja"; fi
     # shellcheck disable=SC2086
@@ -1260,7 +1312,7 @@ if [ "$WANT_GUI" = 1 ]; then
         R_GUI=failed
     fi
 else
-    banner "BUILD 2/4  Claude Codex Backup Qt6 app: skipped (--no-gui)"
+    banner "BUILD 2/4  Claude Codex Cloner (the window): skipped"
 fi
 
 if [ "$INSTALLER_ON" = 1 ]; then
@@ -1276,7 +1328,7 @@ fi
 
 if [ "$WANT_CCCU" = 1 ]; then
     banner "BUILD 4/4  Claude Codex CCU (cccu/)"
-    if build_cccu "$WANT_GUI"; then
+    if build_cccu; then
         CCCU_OK=1; R_CCU=ok
     else
         R_CCU=failed
@@ -1289,7 +1341,7 @@ fi
 # Phase 2: INSTALL everything that compiled, as root (one password prompt)
 # =============================================================================
 banner "INSTALL  everything that compiled (as root)"
-as_root sh "$SELF" --install-all "$GUI_OK" "$INSTALLER_OK" "$IMODE" "$BTRFS" "$EROFS" "$CCCU_OK" ||
+as_root sh "$SELF" --install-all "$GUI_OK" "$INSTALLER_OK" "$IMODE" "$BTRFS" "$EROFS" "$CCCU_OK" "$FLAGS" ||
     die "installing failed - see the messages above"
 command -v "$TARGET" >/dev/null 2>&1 || die "$TARGET is not on PATH after install"
 [ "$INSTALLER_OK" = 1 ] || INSTALLER_ON=0
@@ -1315,13 +1367,15 @@ case "$IMODE" in
 esac
 [ "$IUI" = tui ] && [ "$IMODE" = clone ] && HOW_INSTALL="$HOW_INSTALL (runs in a terminal)"
 printf '\n'
-row "Claude Codex Backup"  ok           "claude-codex-backup  (terminal menu)"
-row "  Qt6 app"            "$R_GUI"     "claude-codex-backup-gui  /  'Claude Codex Backup' in the applications menu"
+case "$R_GUI" in ok) HOW_CCU="the Containers tab  /  sudo claude-codex ccu" ;; *) HOW_CCU="sudo claude-codex ccu  (terminal menu)" ;; esac
+row "Claude Codex Cloner"  "$R_GUI"     "claude-codex-cloner  /  'Claude Codex Cloner' in the menu (Backup, Containers, Updates, Guide)"
+row "Claude Codex Backup"  ok           "the Backup tab  /  claude-codex backup  (terminal menu)"
 row "Claude Codex Install" "$R_INSTALL" "$HOW_INSTALL"
-row "Claude Codex CCU"     "$R_CCU"     "sudo claude-codex-ccu  /  claude-codex-ccu-gui  ('Claude Codex CCU' in the menu)"
+row "Claude Codex CCU"     "$R_CCU"     "$HOW_CCU"
+row "claude-codex"         ok           "claude-codex  (menu of everything)  /  claude-codex update  (update everything)"
 printf '\n'
 FAILED=0
-if [ "$R_GUI" = failed ]; then FAILED=1; say "Qt6 app: see the compiler messages above (build folder $GUI_BUILD)"; fi
+if [ "$R_GUI" = failed ]; then FAILED=1; say "Claude Codex Cloner: see the compiler messages above (build folder $GUI_BUILD)"; fi
 if [ "$R_INSTALL" = failed ]; then FAILED=1; say "Claude Codex Install: every error in $IBUILD/errors.log (configure: configure.log, all output: build.log)"; fi
 if [ "$R_CCU" = failed ]; then FAILED=1; say "Claude Codex CCU: see the messages above (needs GCC 14+ / Clang 17+ and CMake 3.25+; build folder $CBUILD)"; fi
 printf '\033[0m'

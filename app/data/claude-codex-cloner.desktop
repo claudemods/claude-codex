@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Claude Codex Cloner
+GenericName=System Cloner and Container Creator
+Comment=Clone this system into a live ISO or an Incus container, write USB sticks, update the suite (Claude Codex Compendium v1.0 01-11-2026)
+Exec=claude-codex-cloner
+TryExec=claude-codex-cloner
+Icon=claude-codex-cloner
+Terminal=false
+StartupNotify=true
+StartupWMClass=claude-codex-cloner
+Categories=Qt;System;Utility;
+Keywords=claude;codex;cloner;backup;clone;iso;live;usb;incus;container;ccu;update;

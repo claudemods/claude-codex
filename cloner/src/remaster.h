@@ -26,7 +26,7 @@ namespace remaster {
 
 inline std::string g_workDir;
 inline std::string g_cloneDir;
-// Batch mode (the Qt6 app): print "@@step <n> <total> <name>" / "@@result ok|fail" lines it follows
+// Batch mode (Claude Codex Cloner): print "@@step <n> <total> <name>" / "@@result ok|fail" lines it follows
 inline bool g_markers = false;
 // CCCU's cccu-iso-engine: print "[ INFO ] ISO engine <n>/<total>  <step> - <description>" lines, which
 // CCCU shows in its window and on the console

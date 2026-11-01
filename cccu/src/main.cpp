@@ -98,6 +98,8 @@ Container options
   --keep-kernel  --keep-caches  --no-start
   --dry-run                 print what would happen, change nothing
   -y, --yes                 do not ask for confirmation (no menu)
+  --secrets-stdin           read the user's password, then the root password, as two lines from stdin
+                            (how Claude Codex Cloner passes them through pkexec)
   -h, --help
 
 Logs: /var/log/cccu/install.log  container.log  export.log
@@ -112,6 +114,7 @@ int cccu_main(const std::vector<std::string>& original_args, const std::string& 
     std::vector<std::string> args = original_args;
     std::string command;      // iso, iso-usb, containers, duplicate, switch, start, stop
     bool plain = false;
+    bool secrets_stdin = false;
     for (const char* name : {"iso", "iso-usb", "containers", "duplicate", "switch", "start", "stop"}) {
         if (!args.empty() && args.front() == name) {
             command = name;
@@ -271,6 +274,8 @@ int cccu_main(const std::vector<std::string>& original_args, const std::string& 
             o.keep_old = true;
         } else if (a == "--plain") {
             plain = true;
+        } else if (a == "--secrets-stdin") {
+            secrets_stdin = true;
         } else if (a.size() > 1 && a.front() == '-') {
             error("Unknown option: " + a);
             return 2;
@@ -284,12 +289,15 @@ int cccu_main(const std::vector<std::string>& original_args, const std::string& 
         }
     }
 
-    if (!is_root()) {
-        error("Run with root privileges: sudo cccu");
-        return 1;
+    // Claude Codex Cloner: the passwords come as two lines on stdin (pkexec clears the environment)
+    if (secrets_stdin) {
+        std::string line;
+        if (std::getline(std::cin, line)) o.user_password = line;
+        if (std::getline(std::cin, line) && !line.empty()) o.root_password = line;
     }
 
     // Container commands and the ISO builder: no menu. --plain output is for the GUI, so no banner either.
+    // The plain list also works without root for a user in the incus-admin group.
     if (command == "containers" && plain) {
         const auto listed = list_containers(true);
         if (!listed) {
@@ -297,6 +305,10 @@ int cccu_main(const std::vector<std::string>& original_args, const std::string& 
             return 1;
         }
         return 0;
+    }
+    if (!is_root()) {
+        error("Run with root privileges: sudo cccu");
+        return 1;
     }
     if (command == "iso" && o.on_reboot) {
         std::vector<std::string> rest;

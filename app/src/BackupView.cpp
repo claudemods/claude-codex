@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: claudemods
 // SPDX-License-Identifier: MIT
 
-#include "MainWindow.h"
+#include "BackupView.h"
 
 #include "AnsiLog.h"
 #include "TaskPanel.h"
@@ -186,34 +186,25 @@ jsonText( const QJsonValue& v )
 }
 }  // namespace
 
-MainWindow::MainWindow( QWidget* parent )
-    : QMainWindow( parent )
+BackupView::BackupView( QWidget* parent )
+    : QWidget( parent )
     , m_backend( new Backend( this ) )
 {
-    setWindowTitle( tr( "Claude Codex Backup - %1" ).arg( QString::fromLatin1( kRelease ) ) );
-    setWindowIcon( QIcon::fromTheme( QStringLiteral( "drive-harddisk" ) ) );
-    setMinimumSize( 980, 640 );
-    resize( 1200, 780 );
-
-    auto* central = new QWidget;
-    auto* row = new QHBoxLayout( central );
+    auto* row = new QHBoxLayout( this );
     row->setContentsMargins( 0, 0, 0, 0 );
     row->setSpacing( 0 );
 
-    // ---- sidebar --------------------------------------------------------------------------
+    // ---- sidebar: the Backup pages (the window's header and tabs come from MainWindow) -----
     auto* side = new QFrame;
     side->setObjectName( QStringLiteral( "sidebar" ) );
-    side->setFixedWidth( 232 );
+    side->setFixedWidth( 220 );
     auto* sl = new QVBoxLayout( side );
-    sl->setContentsMargins( 14, 20, 14, 14 );
+    sl->setContentsMargins( 14, 18, 14, 14 );
     sl->setSpacing( 10 );
-    auto* brand = new QLabel( QStringLiteral( "Claude Codex" ) );
-    brand->setObjectName( QStringLiteral( "brand" ) );
-    auto* brandSub = new QLabel( tr( "BACKUP  ·  %1" ).arg( QString::fromLatin1( kRelease ) ) );
+    auto* brandSub = new QLabel( tr( "LIVE ISO CLONER" ) );
     brandSub->setObjectName( QStringLiteral( "brandSub" ) );
-    sl->addWidget( brand );
     sl->addWidget( brandSub );
-    sl->addSpacing( 10 );
+    sl->addSpacing( 4 );
 
     m_nav = new QListWidget;
     m_nav->setObjectName( QStringLiteral( "nav" ) );
@@ -226,7 +217,6 @@ MainWindow::MainWindow( QWidget* parent )
         { tr( "Edit Configs" ), QStringLiteral( "document-edit" ) },
         { tr( "Write USB" ), QStringLiteral( "drive-removable-media" ) },
         { tr( "Install" ), QStringLiteral( "system-software-install" ) },
-        { tr( "Guide" ), QStringLiteral( "help-contents" ) },
         { tr( "Maintenance" ), QStringLiteral( "applications-utilities" ) },
     };
     for ( const auto& n : navItems )
@@ -248,12 +238,10 @@ MainWindow::MainWindow( QWidget* parent )
     m_pages->addWidget( makeConfigsPage() );
     m_pages->addWidget( makeUsbPage() );
     m_pages->addWidget( makeInstallPage() );
-    m_pages->addWidget( makeGuidePage() );
     m_pages->addWidget( makeMaintenancePage() );
 
     row->addWidget( side );
     row->addWidget( m_pages, 1 );
-    setCentralWidget( central );
 
     connect( m_nav,
              &QListWidget::currentRowChanged,
@@ -269,23 +257,47 @@ MainWindow::MainWindow( QWidget* parent )
              } );
     m_nav->setCurrentRow( Overview );
 
-    QTimer::singleShot( 0, this, &MainWindow::refreshStatus );
+    QTimer::singleShot( 0, this, &BackupView::refreshStatus );
 }
 
 void
-MainWindow::goTo( Page page )
+BackupView::goTo( Page page )
 {
     m_nav->setCurrentRow( page );
 }
 
+// Write USB with this ISO selected (an ISO made on the Containers tab, for example)
+void
+BackupView::showWriteUsb( const QString& iso )
+{
+    goTo( Usb );
+    if ( iso.isEmpty() || !QFileInfo( iso ).isFile() )
+    {
+        return;
+    }
+    int i = m_isoCombo->findData( iso );
+    if ( i < 0 )
+    {
+        m_isoCombo->insertItem( 0, QFileInfo( iso ).fileName() + QStringLiteral( "  (%1)" ).arg( humanSize( QFileInfo( iso ).size() ) ), iso );
+        i = 0;
+    }
+    m_isoCombo->setCurrentIndex( i );
+}
+
 QString
-MainWindow::isoOutputDir() const
+BackupView::guideText() const
+{
+    return m_backend->guide();
+}
+
+QString
+BackupView::isoOutputDir() const
 {
     return m_status.value( QStringLiteral( "isoOutputDir" ) );
 }
 
 QString
-MainWindow::humanSize( qint64 bytes ) const
+BackupView::humanSize( qint64 bytes ) const
 {
     return QLocale().formattedDataSize( bytes, 1, QLocale::DataSizeTraditionalFormat );
 }
@@ -294,7 +306,7 @@ MainWindow::humanSize( qint64 bytes ) const
 // Status
 // ============================================================================================
 void
-MainWindow::refreshStatus()
+BackupView::refreshStatus()
 {
     QApplication::setOverrideCursor( Qt::WaitCursor );
     m_status = m_backend->status();
@@ -321,10 +333,6 @@ MainWindow::refreshStatus()
     fillSettings();
     fillConfigs();
     fillInstall();
-    if ( m_guide->toPlainText().isEmpty() )
-    {
-        m_guide->setPlainText( m_backend->guide() );
-    }
     // "Claude Codex Backup  Compendium v1.0 01-11-2026  (cloner v1.0) on CachyOS"
     m_versionLabel->setText( tr( "%1  %2  (cloner %3) on %4" )
                                  .arg( m_status.value( QStringLiteral( "app" ) ),
@@ -338,7 +346,7 @@ MainWindow::refreshStatus()
 // Overview
 // ============================================================================================
 QWidget*
-MainWindow::makeOverviewPage()
+BackupView::makeOverviewPage()
 {
     auto* page = new QWidget;
     auto* l = new QVBoxLayout( page );
@@ -366,9 +374,9 @@ MainWindow::makeOverviewPage()
     hl->addWidget( build );
     hl->addWidget( usb );
     hl->addWidget( refresh );
-    connect( build, &QPushButton::clicked, this, &MainWindow::startBuild );
+    connect( build, &QPushButton::clicked, this, &BackupView::startBuild );
     connect( usb, &QPushButton::clicked, this, [ this ]() { goTo( Usb ); } );
-    connect( refresh, &QPushButton::clicked, this, &MainWindow::refreshStatus );
+    connect( refresh, &QPushButton::clicked, this, &BackupView::refreshStatus );
     l->addWidget( hero );
 
     auto* checksCard = card();
@@ -384,7 +392,7 @@ MainWindow::makeOverviewPage()
 }
 
 void
-MainWindow::fillOverview()
+BackupView::fillOverview()
 {
     const ClonerStatus& s = m_status;
     m_distroTitle->setText( s.value( QStringLiteral( "distro" ) ) );
@@ -519,21 +527,7 @@ MainWindow::fillOverview()
                 : tr( "None - the build generates GRUB, boot text and initramfs configs itself." ),
          tr( "Edit" ),
          [ this ]() { goTo( Configs ); } );
-
-    // CCCU, the compendium's container creator (cccu/): a separate program with its own window
-    const QString cccu = QStandardPaths::findExecutable( QStringLiteral( "cccu-gui" ) );
-    add( cccu.isEmpty() ? Info : Ok,
-         tr( "Claude Codex CCU (containers)" ),
-         cccu.isEmpty() ? tr( "Not installed - build.sh builds it on Arch, Debian, Fedora and openSUSE (needs GCC 14+)." )
-                        : tr( "Clone this system into an Incus container, or build a live ISO of a container." ),
-         cccu.isEmpty() ? QString() : tr( "Open" ),
-         [ this, cccu ]()
-         {
-             if ( !QProcess::startDetached( cccu, {} ) )
-             {
-                 QMessageBox::warning( this, tr( "Claude Codex CCU" ), tr( "%1 could not be started." ).arg( cccu ) );
-             }
-         } );
+    // (containers are on the window's Containers tab; its header shows whether CCU is installed)
     m_checks->addStretch( 1 );
 }
 
@@ -541,7 +535,7 @@ MainWindow::fillOverview()
 // Build ISO
 // ============================================================================================
 QWidget*
-MainWindow::makeBuildPage()
+BackupView::makeBuildPage()
 {
     auto* page = new QWidget;
     auto* l = new QVBoxLayout( page );
@@ -593,8 +587,8 @@ MainWindow::makeBuildPage()
     buttons->addWidget( m_toUsb );
     l->addLayout( buttons );
 
-    connect( m_buildButton, &QPushButton::clicked, this, &MainWindow::startBuild );
-    connect( m_bootBuild, &QPushButton::clicked, this, &MainWindow::toggleBootBuild );
+    connect( m_buildButton, &QPushButton::clicked, this, &BackupView::startBuild );
+    connect( m_bootBuild, &QPushButton::clicked, this, &BackupView::toggleBootBuild );
     connect( m_openOutput, &QPushButton::clicked, this, [ this ]() { QDesktopServices::openUrl( QUrl::fromLocalFile( isoOutputDir() ) ); } );
     connect( m_toUsb, &QPushButton::clicked, this, [ this ]() { goTo( Usb ); } );
 
@@ -671,7 +665,7 @@ MainWindow::makeBuildPage()
 }
 
 void
-MainWindow::fillBuild()
+BackupView::fillBuild()
 {
     const ClonerStatus& s = m_status;
     const bool erofs = s.value( QStringLiteral( "imageFormat" ) ) == QLatin1String( "erofs" );
@@ -723,7 +717,7 @@ MainWindow::fillBuild()
 }
 
 void
-MainWindow::startBuild()
+BackupView::startBuild()
 {
     if ( !m_status.ok || !m_status.flag( QStringLiteral( "supported" ) ) )
     {
@@ -774,7 +768,7 @@ MainWindow::startBuild()
 }
 
 void
-MainWindow::toggleBootBuild()
+BackupView::toggleBootBuild()
 {
     const bool scheduled = m_status.flag( QStringLiteral( "bootBuildScheduled" ) );
     if ( scheduled )
@@ -824,7 +818,7 @@ MainWindow::toggleBootBuild()
 // Settings
 // ============================================================================================
 QWidget*
-MainWindow::makeSettingsPage()
+BackupView::makeSettingsPage()
 {
     auto* page = new QWidget;
     auto* l = new QVBoxLayout( page );
@@ -932,7 +926,7 @@ MainWindow::makeSettingsPage()
     buttons->addWidget( save );
     l->addLayout( buttons );
     l->addStretch( 1 );
-    connect( save, &QPushButton::clicked, this, &MainWindow::saveSettings );
+    connect( save, &QPushButton::clicked, this, &BackupView::saveSettings );
     connect( revert,
              &QPushButton::clicked,
              this,
@@ -945,7 +939,7 @@ MainWindow::makeSettingsPage()
 }
 
 void
-MainWindow::fillSettings()
+BackupView::fillSettings()
 {
     const ClonerStatus& s = m_status;
     const QString family = s.family();
@@ -993,7 +987,7 @@ MainWindow::fillSettings()
 }
 
 void
-MainWindow::saveSettings()
+BackupView::saveSettings()
 {
     QStringList kv;
     kv << QStringLiteral( "isoName=" ) + m_isoName->text().trimmed();
@@ -1026,7 +1020,7 @@ MainWindow::saveSettings()
 // Edit Configs
 // ============================================================================================
 QWidget*
-MainWindow::makeConfigsPage()
+BackupView::makeConfigsPage()
 {
     auto* page = new QWidget;
     auto* l = new QVBoxLayout( page );
@@ -1107,7 +1101,7 @@ MainWindow::makeConfigsPage()
                      loadConfigItem( it );
                  }
              } );
-    connect( m_configSave, &QPushButton::clicked, this, &MainWindow::saveConfigItem );
+    connect( m_configSave, &QPushButton::clicked, this, &BackupView::saveConfigItem );
     connect( m_configCreate,
              &QPushButton::clicked,
              this,
@@ -1178,7 +1172,7 @@ MainWindow::makeConfigsPage()
 }
 
 void
-MainWindow::fillConfigs()
+BackupView::fillConfigs()
 {
     auto header = [ this ]( const QString& text )
     {
@@ -1236,7 +1230,7 @@ MainWindow::fillConfigs()
 }
 
 bool
-MainWindow::confirmDiscardEdits()
+BackupView::confirmDiscardEdits()
 {
     if ( !m_editorDirty )
     {
@@ -1246,7 +1240,7 @@ MainWindow::confirmDiscardEdits()
 }
 
 void
-MainWindow::loadConfigItem( QListWidgetItem* item )
+BackupView::loadConfigItem( QListWidgetItem* item )
 {
     if ( !item || item->data( Qt::UserRole ).toString() == QLatin1String( "header" ) || !confirmDiscardEdits() )
     {
@@ -1313,7 +1307,7 @@ MainWindow::loadConfigItem( QListWidgetItem* item )
 }
 
 void
-MainWindow::saveConfigItem()
+BackupView::saveConfigItem()
 {
     if ( !m_configCurrent )
     {
@@ -1361,7 +1355,7 @@ MainWindow::saveConfigItem()
 // Write USB
 // ============================================================================================
 QWidget*
-MainWindow::makeUsbPage()
+BackupView::makeUsbPage()
 {
     auto* page = new QWidget;
     auto* l = new QVBoxLayout( page );
@@ -1413,12 +1407,12 @@ MainWindow::makeUsbPage()
                  }
              } );
     connect( refresh, &QPushButton::clicked, this, [ this ]() { refreshDrives( m_driveCombo, true ); } );
-    connect( write, &QPushButton::clicked, this, &MainWindow::writeUsb );
+    connect( write, &QPushButton::clicked, this, &BackupView::writeUsb );
     return pageFrame( page );
 }
 
 void
-MainWindow::refreshIsos()
+BackupView::refreshIsos()
 {
     const QString keep = m_isoCombo->currentData().toString();
     m_isoCombo->clear();
@@ -1441,7 +1435,7 @@ MainWindow::refreshIsos()
 }
 
 void
-MainWindow::refreshDrives( QComboBox* combo, bool removableFirst )
+BackupView::refreshDrives( QComboBox* combo, bool removableFirst )
 {
     const QString keep = combo->currentData().toString();
     combo->clear();
@@ -1523,7 +1517,7 @@ MainWindow::refreshDrives( QComboBox* combo, bool removableFirst )
 }
 
 void
-MainWindow::writeUsb()
+BackupView::writeUsb()
 {
     const QString iso = m_isoCombo->currentData().toString();
     const QString drive = m_driveCombo->currentData().toString();
@@ -1551,7 +1545,7 @@ MainWindow::writeUsb()
 // Install
 // ============================================================================================
 QWidget*
-MainWindow::makeInstallPage()
+BackupView::makeInstallPage()
 {
     auto* page = new QWidget;
     auto* l = new QVBoxLayout( page );
@@ -1582,7 +1576,7 @@ MainWindow::makeInstallPage()
     launchRow->addStretch( 1 );
     cil->addLayout( launchRow );
     cil->addStretch( 1 );
-    connect( m_launchInstaller, &QPushButton::clicked, this, &MainWindow::launchInstaller );
+    connect( m_launchInstaller, &QPushButton::clicked, this, &BackupView::launchInstaller );
     m_installStack->addWidget( ci );
 
     // 1: Alpine's own installer
@@ -1615,7 +1609,7 @@ MainWindow::makeInstallPage()
     atl->addWidget( m_installTask );
     all->addWidget( atc, 1 );
     connect( refresh, &QPushButton::clicked, this, [ this ]() { refreshDrives( m_alpineDisk, false ); } );
-    connect( install, &QPushButton::clicked, this, &MainWindow::installAlpine );
+    connect( install, &QPushButton::clicked, this, &BackupView::installAlpine );
     m_installStack->addWidget( al );
 
     l->addWidget( m_installStack, 1 );
@@ -1623,7 +1617,7 @@ MainWindow::makeInstallPage()
 }
 
 void
-MainWindow::fillInstall()
+BackupView::fillInstall()
 {
     m_installStack->setCurrentIndex( isAlpine() ? 1 : 0 );
     if ( isAlpine() )
@@ -1644,7 +1638,7 @@ MainWindow::fillInstall()
 }
 
 void
-MainWindow::launchInstaller()
+BackupView::launchInstaller()
 {
     const QString launcher = m_status.value( QStringLiteral( "installerLauncher" ) );
     // Only the terminal installer was built: it needs a terminal, which this window is not
@@ -1673,7 +1667,7 @@ MainWindow::launchInstaller()
 }
 
 void
-MainWindow::installAlpine()
+BackupView::installAlpine()
 {
     const QString disk = m_alpineDisk->currentData().toString();
     if ( disk.isEmpty() )
@@ -1697,51 +1691,31 @@ MainWindow::installAlpine()
 }
 
 // ============================================================================================
-// Guide
+// Maintenance (updates of the whole suite are on the window's Updates tab)
 // ============================================================================================
 QWidget*
-MainWindow::makeGuidePage()
+BackupView::makeMaintenancePage()
 {
     auto* page = new QWidget;
     auto* l = new QVBoxLayout( page );
     l->setSpacing( 14 );
-    l->addWidget( pageHeader( tr( "Guide" ), tr( "How a clone is made on this distro, step by step." ) ) );
-    m_guide = new QPlainTextEdit;
-    m_guide->setObjectName( QStringLiteral( "guide" ) );
-    m_guide->setReadOnly( true );
-    m_guide->setFont( QFontDatabase::systemFont( QFontDatabase::FixedFont ) );
-    l->addWidget( m_guide, 1 );
-    return pageFrame( page );
-}
-
-// ============================================================================================
-// Maintenance
-// ============================================================================================
-QWidget*
-MainWindow::makeMaintenancePage()
-{
-    auto* page = new QWidget;
-    auto* l = new QVBoxLayout( page );
-    l->setSpacing( 14 );
-    l->addWidget( pageHeader( tr( "Maintenance" ), tr( "Updates, the Arch mkinitcpio config and the log." ) ) );
+    l->addWidget( pageHeader( tr( "Maintenance" ), tr( "The Arch mkinitcpio config, the log and the settings folder." ) ) );
 
     auto* c = card();
     auto* cl = new QVBoxLayout( c );
     cl->setContentsMargins( 22, 18, 22, 18 );
     m_versionLabel = new QLabel;
     m_versionLabel->setObjectName( QStringLiteral( "heroTitle" ) );
-    m_updateLabel = new QLabel( tr( "Not checked for updates yet." ) );
-    m_updateLabel->setObjectName( QStringLiteral( "muted" ) );
+    auto* updatesNote = new QLabel( tr( "Updates for every Claude Codex tool are on the Updates tab." ) );
+    updatesNote->setObjectName( QStringLiteral( "muted" ) );
     cl->addWidget( m_versionLabel );
-    cl->addWidget( m_updateLabel );
+    cl->addWidget( updatesNote );
     auto* row = new QHBoxLayout;
-    auto* check = button( tr( "Check For Updates" ), QStringLiteral( "view-refresh" ) );
-    auto* update = button( tr( "Update Cloner" ), QStringLiteral( "system-software-update" ), "primary" );
+    auto* updates = button( tr( "Open Updates" ), QStringLiteral( "system-software-update" ) );
     m_mkinitcpio = button( tr( "mkinitcpio Config" ), QStringLiteral( "run-build" ) );
     auto* log = button( tr( "Open Log" ), QStringLiteral( "text-x-log" ) );
     auto* cfg = button( tr( "Open Settings Folder" ), QStringLiteral( "folder-open" ) );
-    row->addWidget( check );
-    row->addWidget( update );
+    row->addWidget( updates );
     row->addWidget( m_mkinitcpio );
     row->addStretch( 1 );
     row->addWidget( log );
@@ -1756,17 +1730,7 @@ MainWindow::makeMaintenancePage()
     tl->addWidget( m_maintTask );
     l->addWidget( tc, 1 );
 
-    connect( check, &QPushButton::clicked, this, &MainWindow::checkForUpdates );
-    connect( update,
-             &QPushButton::clicked,
-             this,
-             [ this ]()
-             {
-                 if ( QMessageBox::question( this, tr( "Update" ), tr( "Download, build and install the latest cloner from GitHub?" ) ) == QMessageBox::Yes )
-                 {
-                     m_maintTask->start( tr( "Updating the cloner" ), { QStringLiteral( "--update" ) }, false );
-                 }
-             } );
+    connect( updates, &QPushButton::clicked, this, &BackupView::updatesRequested );
     connect( m_mkinitcpio,
              &QPushButton::clicked,
              this,
@@ -1783,53 +1747,22 @@ MainWindow::makeMaintenancePage()
     return pageFrame( page );
 }
 
-void
-MainWindow::checkForUpdates()
-{
-    m_updateLabel->setText( tr( "Checking GitHub..." ) );
-    auto* p = new QProcess( this );
-    connect( p,
-             &QProcess::finished,
-             this,
-             [ this, p ]( int, QProcess::ExitStatus )
-             {
-                 QString latest;
-                 bool newer = false;
-                 for ( const QString& line : QString::fromUtf8( p->readAllStandardOutput() ).split( QLatin1Char( '\n' ) ) )
-                 {
-                     if ( line.startsWith( QLatin1String( "latest=" ) ) )
-                     {
-                         latest = line.mid( 7 ).trimmed();
-                     }
-                     else if ( line == QLatin1String( "newer=1" ) )
-                     {
-                         newer = true;
-                     }
-                 }
-                 m_updateLabel->setText( latest.isEmpty() ? tr( "The update check failed (offline, or GitHub unreachable)." )
-                                         : newer          ? tr( "Version %1 is available - press Update Cloner." ).arg( latest )
-                                                          : tr( "Up to date (%1)." ).arg( latest ) );
-                 p->deleteLater();
-             } );
-    p->start( Backend::clonerPath(), { QStringLiteral( "--check-update" ) } );
-}
-
-void
-MainWindow::closeEvent( QCloseEvent* event )
+// Asked by the window before it closes: false keeps it open
+bool
+BackupView::confirmClose()
 {
     if ( m_backend->isRunning() )
     {
-        if ( QMessageBox::question( this, tr( "Quit" ), tr( "A task is still running. Cancel it and quit?" ) ) != QMessageBox::Yes )
+        if ( QMessageBox::question( this, tr( "Quit" ), tr( "A Backup task is still running. Cancel it and quit?" ) ) != QMessageBox::Yes )
         {
-            event->ignore();
-            return;
+            return false;
         }
         m_backend->cancel();
     }
     if ( m_settingsDirty
-         && QMessageBox::question( this, tr( "Quit" ), tr( "Save the changed settings before quitting?" ) ) == QMessageBox::Yes )
+         && QMessageBox::question( this, tr( "Quit" ), tr( "Save the changed Backup settings before quitting?" ) ) == QMessageBox::Yes )
     {
         saveSettings();
     }
-    event->accept();
+    return true;
 }

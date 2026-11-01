@@ -56,7 +56,8 @@ bool valid_user(const std::string& user) {
 std::string active_container() { return active_value("CCCU_CONTAINER"); }
 
 Result list_containers(bool plain) {
-    if (!is_root()) return fail("This must run as root: sudo cccu containers");
+    // the plain list (for Claude Codex Cloner) also works for a user in the incus-admin group
+    if (!is_root() && !plain) return fail("This must run as root: sudo cccu containers");
     const std::string active = active_container();
     std::vector<std::pair<std::string, std::string>> rows;
     for (const auto& line : split_lines(query({"incus", "list", "--format", "csv", "-c", "ns"}))) {

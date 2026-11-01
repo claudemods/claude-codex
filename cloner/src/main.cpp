@@ -135,7 +135,7 @@ bool hasArg(int argc, char* argv[], const std::string& arg) {
 }
 
 int main(int argc, char* argv[]) {
-    // Non-interactive commands (--status, --build-iso, ...): what the Qt6 app runs. No menu, no
+    // Non-interactive commands (--status, --build-iso, ...): what Claude Codex Cloner runs. No menu, no
     // terminal resizing; the ones that need root re-launch through sudo/doas/run0/pkexec/su.
     if (const cli::Command* cmd = cli::find(argc, argv)) {
         USERNAME = originalUser(argc, argv);

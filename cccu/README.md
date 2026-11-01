@@ -27,9 +27,9 @@
 
 # Claude Codex CCU - Container Creator Utility
 
-**Claude Codex Compendium v1.0 01-11-2026** (formerly CCCU, the Claudemods Container Creator Utility; the commands are still `cccu` / `cccu-gui`, also `claude-codex-ccu` / `claude-codex-ccu-gui`)
+**Claude Codex Compendium v1.0 01-11-2026** (formerly CCCU, the Claudemods Container Creator Utility). The command is `cccu` (also `claude-codex-ccu` and `claude-codex ccu`); its window is the **Containers** tab of **Claude Codex Cloner**.
 
-> Part of the **Claude Codex Compendium v1.0** (`cccu/`). Build it with the compendium's `../build.sh` (or `bash build.sh` here); it needs the compendium next to it (`../cloner`, `../installer`).
+> Part of the **Claude Codex Compendium v1.0** (`cccu/`). Build it with the compendium's `../build.sh`; it needs the compendium next to it (`../cloner`, `../installer`).
 >
 > **ClaudeInstall is merged into CCCU.** The live ISOs CCCU builds of a container now install themselves with
 > **ClaudeInstall** (the compendium's Qt6 installer, `../installer`) instead of Calamares. CCCU carries the
@@ -79,7 +79,7 @@ drive / running system
 
 ```bash
 # 0. build and install, directly (dependencies are installed for you)
-bash build.sh
+../build.sh   # from the compendium folder: ./build.sh
 
 # 1. on the machine you want to clone
 sudo cccu --export desktop.tar.zst
@@ -87,7 +87,7 @@ sudo cccu --export desktop.tar.zst
 # 2. on the machine that will host the container
 #    (or boot an Arch live ISO and choose "Install to a drive" to wipe a drive)
 sudo cccu              # terminal version
-                       # or click "CCCU" in the application menu: the Qt6 desktop version (see Build)
+                       # or the Containers tab of Claude Codex Cloner (application menu)
 ```
 
 ## The interface
@@ -132,53 +132,22 @@ output is also available with `journalctl -u cccu-firstboot -f`.
 
 ## Build
 
-Requires GCC 14+ (or Clang 17+) with C++23 and CMake 3.25+. The terminal tool needs no other libraries; the Qt6
-desktop version additionally needs Qt 6 Widgets.
+Requires GCC 14+ (or Clang 17+) with C++23 and CMake 3.25+. The terminal tool needs no other libraries.
 
-### Build the GUI (Qt6 desktop version)
-
-```bash
-bash build.sh
-```
-
-That is the whole process - it installs directly. It installs the dependencies (including Qt 6), builds **`cccu-gui`**
-together with the terminal tool `cccu` and the ISO engine, installs them system-wide and adds **CCCU** to your
-application menu. Then:
-
-* click **CCCU** in the application menu, **or**
-* double-click `build/cccu-gui` in the file manager (if you used `--no-install`).
-
-It asks for your password in the normal desktop dialog - no terminal or `sudo` needed to start it.
-With `--no-install` the build is the same, just not installed: `bash build.sh --no-install`.
-
-### Build the terminal tool only
+Build it with the compendium's one build script, from the top folder:
 
 ```bash
-bash build.sh --no-gui        # no Qt needed
-sudo ./build/cccu
+./build.sh
 ```
 
-### What build.sh does
+It installs the dependencies, builds `cccu` and the ISO engine together with the other Claude Codex tools, and
+installs them (`/usr/local/bin/cccu`, plus the polkit rule the window uses). Answer *yes* to "Build Claude Codex
+CCU". The dependencies are the compiler, CMake 3.25+, `rsync`, `tar`, `zstd`, `squashfs-tools`, `parted`,
+`dosfstools`, `e2fsprogs`, `btrfs-progs`, `curl` (the ISO boot files are fetched once and carried inside `cccu`), a
+static libc for the ISO engine (`glibc-static` on Fedora, `glibc-devel-static` on openSUSE) and polkit. Incus itself
+is installed later by CCCU when it sets up a host.
 
-`build.sh` detects your system (Arch, Debian/Ubuntu, Fedora or openSUSE family), installs the build and runtime
-dependencies with its package manager, and builds into `build/`.
-
-| Option | |
-|---|---|
-| `--no-install` | build only; the default is to install system-wide (CCCU in the application menu) |
-| `--no-gui` | terminal tool only (no Qt6 needed) |
-| `--deps-only` | only install the dependencies |
-| `--no-deps` | build without touching the package manager |
-| `--clean` | remove `build/` first |
-| `-j <N>` | parallel jobs (default: all cores) |
-
-It checks for a C++23 compiler (GCC 14+ or Clang 17+) and stops with a clear message if the system's is too old.
-The dependencies are the compiler, CMake 3.25+, `rsync`, `tar`, `zstd`, `squashfs-tools`, `parted`, `dosfstools`,
-`e2fsprogs`, `btrfs-progs`, `curl` (the ISO boot files are fetched once and carried inside `cccu`), a static libc for
-the ISO engine (`glibc-static` on Fedora, `glibc-devel-static` on openSUSE), and for the GUI Qt 6 Widgets and polkit. Incus itself is installed later by CCCU
-when it sets up a host.
-
-**By hand - terminal version** (`cccu`):
+**By hand** (inside the compendium, it needs `../cloner` and `../installer`):
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -186,42 +155,31 @@ cmake --build build -j
 sudo ./build/cccu
 ```
 
-**By hand - Qt6 desktop version** (`cccu-gui`, additionally needs Qt 6 Widgets, e.g. `qt6-base` on Arch,
-`qt6-base-dev` on Debian/Ubuntu, `qt6-qtbase-devel` on Fedora). One command builds both programs:
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCCCU_BUILD_GUI=ON
-cmake --build build -j
-sudo cmake --install build        # adds "CCCU" with an icon to the application menu
-```
-
-Without installing, double-click `build/cccu-gui` in the file manager.
-
 ## Desktop version (Qt6)
 
-`cccu-gui` offers every mode on ONE screen, no scrolling: tabs on top (*Install to a drive*, *Set up on this system*,
-*Export*, *Create ISO*, *Containers*), the settings of the tab in a two-column grid, and progress, log and buttons at the
-bottom. Every setting has the same status box as the terminal menu - green `SET`, red `NOT SET`, grey `OPTIONAL` -
-and **Start** unlocks only when nothing required is red. A progress bar follows the steps, and the log shows the
-installer output live (errors red, warnings amber).
+The window is the **Containers** tab of **Claude Codex Cloner** (`../app`, *Claude Codex Cloner* in the application
+menu). It offers every mode: tabs (*Install to a drive*, *Set up on this system*, *Export*, *Create ISO*, *Manage
+containers*), the settings of the tab in a two-column grid, and progress, log and buttons at the bottom. Every
+setting has the same status box as the terminal menu - green `SET`, red `NOT SET`, grey `OPTIONAL` - and **Start**
+unlocks only when nothing required is red. A progress bar follows the steps, and the log shows the output live.
 
-* It is a front-end: it runs the `cccu` tool (found next to `cccu-gui`, or in `PATH`) with your settings, so both
-  versions behave identically and write the same logs.
-* It is started by clicking - no terminal. It needs root (it partitions drives and installs packages), so on
-  start it asks for your password with the desktop's own authentication dialog (polkit / `pkexec`) and reopens
-  with the rights it needs. If that is not available the window opens but Start stays disabled and says why.
-* Before a drive install it asks you to type the device path to confirm the wipe.
-* **Export** always asks where to save the image (a "Save as" dialog, starting in your home folder). The tool
-  shows the full path, checks the free space, writes the image with a live percentage, then verifies that the
-  file exists, hands it to your user, and the window reports the final path and size. A missing file is
-  reported as a failure, never as success.
-* The user and root passwords are passed to the tool through its environment and set with `chpasswd`; they never
-  appear on a command line or in the log.
-* **Dry run** shows what would happen without changing anything. **Cancel** stops the running operation.
-
+* It is a front-end: it runs the `cccu` tool with your settings, so both versions behave identically and write the
+  same logs.
+* The window runs as your user. Each task runs `cccu` through `pkexec`: the desktop's password dialog, kept for a
+  few minutes (polkit rule `org.claudemods.claude-codex.ccu`).
+* The user and root passwords are passed to the tool through stdin (`--secrets-stdin`) and set with `chpasswd`;
+  they never appear on a command line, in the environment or in the log.
+* The container list is read as your user when you are in the `incus-admin` group; otherwise *Refresh* asks for the
+  password.
+* Before a drive install it asks you to type the device path to confirm the wipe. **Export** always asks where to
+  save the image and verifies that the file exists afterwards.
+* A finished ISO is written to a USB stick on the window's *Backup > Write USB* (one USB writer for the suite);
+  `cccu iso-usb` does the same in a terminal.
+* **Dry run** shows what would happen without changing anything. **Cancel** stops the running operation (it asks
+  for the password once more, since the tool runs as root).
 ## Live ISOs and several containers
 
-**Create ISO** (menu 4, GUI tab *Create ISO*) turns the system inside a container into a bootable live ISO. The
+**Create ISO** (menu 4, the Containers tab's *Create ISO*) turns the system inside a container into a bootable live ISO. The
 claudebackup engine is the **Claude Codex Compendium's cloner** (`../cloner/src`, the same code as
 `claudebackup-linux`); it is built as `cccu-iso-engine` and carried inside the `cccu` binary, together with the boot
 files and the compendium's provisioning bundle (its `build.sh` and the ClaudeInstall sources). The engine itself is
@@ -252,7 +210,7 @@ The ISO is saved in `~/Downloads` unless you choose another folder: the window a
 Settings: ISO name and tag, image format (squashfs / erofs), zstd level, RAM boot entry, package-cache cleaning,
 ClaudeInstall installer (ext4 or btrfs zstd:22). The ISO needs free space inside the container of roughly twice its size.
 
-**Containers** (menu 5, GUI tab *Containers*): keep several containers and choose which one the host session shows.
+**Containers** (menu 5, the Containers tab's *Manage containers*): keep several containers and choose which one the host session shows.
 
 ```bash
 sudo cccu containers

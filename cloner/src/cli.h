@@ -4,7 +4,7 @@
 #include <csignal>
 #include "menu.h"
 
-// Non-interactive commands. The Qt6 app (claudebackup-linux-qt6) drives the cloner through them, so
+// Non-interactive commands. Claude Codex Cloner (app/, its Backup tab) drives the cloner through them, so
 // the GUI and the menu share one engine; they work from scripts too. Info commands run as the user,
 // the others need root (the app starts them through pkexec, the terminal through sudo/doas/...).
 // Output is the normal coloured log; "@@..." lines are markers for the app (see remaster::marker).

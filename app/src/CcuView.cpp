@@ -1,4 +1,7 @@
-#include "mainwindow.hpp"
+// SPDX-FileCopyrightText: claudemods
+// SPDX-License-Identifier: MIT
+
+#include "CcuView.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -25,6 +28,7 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSpinBox>
+#include <QStandardPaths>
 #include <QStyle>
 #include <QTabBar>
 #include <QTabWidget>
@@ -35,29 +39,21 @@
 
 #include <algorithm>
 
-#include <pwd.h>
 #include <unistd.h>
 
 namespace {
 
-// The home folder of the person who clicked: the GUI itself runs as root (pkexec), whose home is /root.
-QString userHome() {
-    const QByteArray uid = qgetenv("PKEXEC_UID");
-    if (!uid.isEmpty()) {
-        if (const passwd* pw = ::getpwuid(static_cast<uid_t>(uid.toUInt()))) return QString::fromLocal8Bit(pw->pw_dir);
-    }
-    return QDir::homePath();
-}
+// The window runs as the person who started it, so their home is the normal one.
+QString userHome() { return QDir::homePath(); }
 
-// Paths typed by hand may be relative: make them absolute from the user's home, never from root's folder.
+// Paths typed by hand may be relative: make them absolute from the user's home.
 QString absolutize(const QString& text) {
     const QString trimmed = text.trimmed();
     if (trimmed.isEmpty() || QDir::isAbsolutePath(trimmed)) return trimmed;
     return QDir(userHome()).absoluteFilePath(trimmed);
 }
 
-// Opens the log folder in the file manager. The GUI runs as root, which has no desktop session of its own,
-// so the folder is opened as the person who clicked (runuser + their session bus).
+// Opens CCU's log folder in the file manager.
 void openLogFolder(QWidget* parent) {
     const QString dir = "/var/log/cccu";
     if (!QFileInfo(dir).isDir()) {
@@ -65,74 +61,14 @@ void openLogFolder(QWidget* parent) {
                                  " when an operation runs (install.log, container.log, export.log, iso.log).");
         return;
     }
-    bool started = false;
-    const QByteArray uid = qgetenv("PKEXEC_UID");
-    if (::geteuid() == 0 && !uid.isEmpty()) {
-        if (const passwd* pw = ::getpwuid(static_cast<uid_t>(uid.toUInt()))) {
-            const QString runtime = "/run/user/" + QString::fromLatin1(uid);
-            QStringList args = {"-u", QString::fromLocal8Bit(pw->pw_name), "--", "env", "XDG_RUNTIME_DIR=" + runtime,
-                                "DBUS_SESSION_BUS_ADDRESS=unix:path=" + runtime + "/bus"};
-            for (const char* name : {"DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY"}) {
-                if (qEnvironmentVariableIsSet(name)) args << QString("%1=%2").arg(QString::fromLatin1(name), qEnvironmentVariable(name));
-            }
-            args << "xdg-open" << dir;
-            started = QProcess::startDetached("runuser", args);
-        }
-    } else {
-        started = QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
-    }
-    if (!started) QMessageBox::information(parent, "Log folder", "The logs are in:\n\n" + dir);
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(dir))) QMessageBox::information(parent, "Log folder", "The logs are in:\n\n" + dir);
 }
 
-const char* kStyle = R"(
-* { font-size: 13px; }
-QMainWindow, QWidget#central { background: #12151a; }
-QWidget { color: #e3e6ea; }
-QLabel#brand { font-size: 26px; font-weight: 800; color: #ff5a5f; letter-spacing: 3px; }
-QLabel#subtitle { color: #8b93a1; font-size: 13px; }
-QLabel#version { color: #6b7280; font-size: 12px; }
-QLabel#muted { color: #8b93a1; }
-QLabel#h1 { font-size: 17px; font-weight: 700; color: #ffffff; }
-QLabel#fieldLabel { color: #aab1be; }
-QFrame#card { background: #1a1e25; border: 1px solid #272d38; border-radius: 10px; }
-QTabWidget::pane { border: none; top: 0px; }
-QTabBar { background: transparent; }
-QTabBar::tab { background: transparent; color: #8b93a1; padding: 9px 20px; margin-right: 4px; border: none; border-bottom: 2px solid transparent; font-weight: 600; }
-QTabBar::tab:selected { color: #ffffff; border-bottom: 2px solid #3b82f6; }
-QTabBar::tab:hover:!selected { color: #cfd5de; }
-QTabBar::tab:disabled { color: #4b5160; }
-QLineEdit, QComboBox, QSpinBox { background: #0f1217; border: 1px solid #323a48; border-radius: 6px; padding: 5px 8px; min-height: 20px; }
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border: 1px solid #3b82f6; }
-QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled { color: #5b6270; background: #14171d; }
-QComboBox QAbstractItemView { background: #0f1217; selection-background-color: #2a3550; border: 1px solid #323a48; }
-QPushButton { background: #262d3a; border: 1px solid #343d4e; border-radius: 6px; padding: 6px 14px; }
-QPushButton:hover { background: #303949; }
-QPushButton:disabled { color: #5f6675; background: #1c2029; border-color: #272d38; }
-QPushButton#start { background: #1f8f45; border: none; font-weight: 700; padding: 8px 30px; color: white; }
-QPushButton#start:hover { background: #25a653; }
-QPushButton#start:disabled { background: #25402f; color: #7d9a86; }
-QPushButton#cancel { background: #8c2a2a; border: none; color: white; }
-QPushButton#cancel:disabled { background: #2a2023; color: #6b5a5c; }
-QPushButton#accent { background: #2f66c9; border: none; color: white; font-weight: 600; }
-QPushButton#accent:hover { background: #3b78e6; }
-QPushButton#accent:disabled { background: #232d44; color: #6a7388; }
-QLabel[state="set"] { background: #1f8f45; color: white; border-radius: 4px; padding: 2px 0; font-weight: 700; font-size: 10px; }
-QLabel[state="missing"] { background: #c62828; color: white; border-radius: 4px; padding: 2px 0; font-weight: 700; font-size: 10px; }
-QLabel[state="optional"] { background: #323a48; color: #aab1be; border-radius: 4px; padding: 2px 0; font-weight: 700; font-size: 10px; }
-QLabel#summary[state="ok"] { background: #1f8f45; color: white; border-radius: 12px; padding: 3px 14px; font-weight: 700; }
-QLabel#summary[state="bad"] { background: #c62828; color: white; border-radius: 12px; padding: 3px 14px; font-weight: 700; }
-QLabel#warning { background: #7a2e12; color: #ffd9c7; border-radius: 6px; padding: 6px 12px; }
-QProgressBar { background: #0f1217; border: 1px solid #323a48; border-radius: 6px; text-align: center; min-height: 16px; max-height: 16px; font-size: 11px; }
-QProgressBar::chunk { background: #1f8f45; border-radius: 5px; }
-QPlainTextEdit { background: #0b0d11; border: 1px solid #272d38; border-radius: 6px; padding: 4px; }
-QTableWidget { background: #0f1217; border: 1px solid #323a48; border-radius: 6px; gridline-color: #232935; outline: none; }
-QTableWidget::item { padding: 6px 8px; }
-QTableWidget::item:selected { background: #2a3550; color: white; }
-QHeaderView::section { background: #1a1e25; color: #8b93a1; border: none; border-bottom: 1px solid #272d38; padding: 6px 8px; font-weight: 600; }
-QCheckBox::indicator { width: 16px; height: 16px; }
-QToolTip { background: #0f1217; color: #e3e6ea; border: 1px solid #323a48; }
-)";
-
+// The tool's lines may carry colour codes (pkexec does not pass NO_COLOR on)
+QString stripAnsi(QString line) {
+    static const QRegularExpression ansi("\x1b\\[[0-9;?]*[A-Za-z]");
+    return line.remove(ansi);
+}
 bool validUser(const QString& text) {
     static const QRegularExpression re("^[a-z0-9_-]+$");
     return re.match(text).hasMatch();
@@ -166,39 +102,42 @@ QLabel* makeLabel(const QString& text, const char* objectName) {
 
 }  // namespace
 
-MainWindow::MainWindow() {
-    setWindowTitle("Claude Codex CCU - Container Creator Utility");
-    resize(1200, 780);
-    setMinimumSize(1120, 740);
-    setStyleSheet(kStyle);
+// ---- the tool and the window ------------------------------------------------------------------
 
-    auto* central = new QWidget;
-    central->setObjectName("central");
-    setCentralWidget(central);
-    auto* col = new QVBoxLayout(central);
-    col->setContentsMargins(20, 14, 20, 14);
+QString CcuView::cccuPath() {
+    const QString env = qEnvironmentVariable("CLAUDE_CODEX_CCU");
+    if (!env.isEmpty() && QFileInfo(env).isExecutable()) return QFileInfo(env).absoluteFilePath();
+    const QString found = QStandardPaths::findExecutable("cccu");
+    if (!found.isEmpty()) return found;   // absolute: the polkit rule names the full path
+    return "/usr/local/bin/cccu";
+}
+
+bool CcuView::available() { return QFileInfo(cccuPath()).isExecutable(); }
+
+CcuView::CcuView(QWidget* parent) : QWidget(parent) {
+    auto* col = new QVBoxLayout(this);
+    col->setContentsMargins(24, 16, 24, 16);
     col->setSpacing(10);
 
-    // ---- header ----
+    // ---- header: what this tab is ----
     auto* header = new QHBoxLayout;
     header->setSpacing(14);
-    header->addWidget(makeLabel("Claude Codex CCU", "brand"));
-    header->addWidget(makeLabel("Container Creator Utility", "subtitle"));
-    header->addStretch();
-    rootWarning_ = makeLabel("Administrator rights missing - close and open Claude Codex CCU again (is polkit / pkexec installed?)", "warning");
-    rootWarning_->setVisible(::geteuid() != 0);
-    header->addWidget(rootWarning_);
-    header->addWidget(makeLabel(QString("Compendium v%1  %2").arg(QString::fromLatin1(CCCU_GUI_VERSION), QString::fromLatin1(CCCU_DATE)), "version"));
+    header->addWidget(makeLabel("Containers", "h1"));
+    auto* about = makeLabel("Claude Codex CCU - clone this system into an Incus container, install it to a drive, export it, "
+                            "or make a live ISO of a container. Each task asks for the administrator password.", "muted");
+    about->setWordWrap(true);
+    header->addWidget(about, 1);
     col->addLayout(header);
 
     // ---- tabs: one settings page each ----
     tabs_ = new QTabWidget;
+    tabs_->setObjectName("subTabs");
     tabs_->setDocumentMode(true);
     tabs_->addTab(buildPage(Install), "Install to a drive");
     tabs_->addTab(buildPage(Running), "Set up on this system");
     tabs_->addTab(buildPage(Export), "Export");
     tabs_->addTab(buildIsoPage(), "Create ISO");
-    tabs_->addTab(buildContainersPage(), "Containers");
+    tabs_->addTab(buildContainersPage(), "Manage containers");
     col->addWidget(tabs_, 1);
 
     // ---- bottom: progress, log, buttons ----
@@ -210,7 +149,7 @@ MainWindow::MainWindow() {
 
     auto* top = new QHBoxLayout;
     stepLabel_ = makeLabel("Ready.", "muted");
-    summary_ = makeLabel("", "summary");
+    summary_ = makeLabel("", "readyBadge");
     top->addWidget(stepLabel_, 1);
     top->addWidget(summary_);
     b->addLayout(top);
@@ -222,12 +161,11 @@ MainWindow::MainWindow() {
     b->addWidget(bar_);
 
     log_ = new QPlainTextEdit;
+    log_->setObjectName("console");
     log_->setReadOnly(true);
     log_->setMaximumBlockCount(20000);
     log_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
-    log_->setFixedHeight(112);
-    log_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);   // follows the output by itself; no scroller on screen
-    log_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    log_->setFixedHeight(120);
     log_->setLineWrapMode(QPlainTextEdit::NoWrap);
     b->addWidget(log_);
 
@@ -237,10 +175,10 @@ MainWindow::MainWindow() {
     dryRun_ = new QCheckBox("Dry run (change nothing)");
     auto* openLog = new QPushButton("Open log folder");
     cancelButton_ = new QPushButton("Cancel");
-    cancelButton_->setObjectName("cancel");
+    cancelButton_->setObjectName("danger");
     cancelButton_->setEnabled(false);
     startButton_ = new QPushButton("Start");
-    startButton_->setObjectName("start");
+    startButton_->setObjectName("primary");
     actions->addWidget(result_, 1);
     actions->addWidget(dryRun_);
     actions->addSpacing(8);
@@ -255,18 +193,25 @@ MainWindow::MainWindow() {
     connect(cancelButton_, &QPushButton::clicked, this, [this] { cancel(); });
     connect(openLog, &QPushButton::clicked, this, [this] { openLogFolder(this); });
 
-    refreshContainers();
+    refreshContainers(false);   // without a password prompt at start; Refresh asks when it is needed
     refreshStatus();
 }
 
-MainWindow::Mode MainWindow::currentMode() const {
+bool CcuView::confirmClose() {
+    if (!running_) return true;
+    if (QMessageBox::question(this, "Quit", "A Containers task is still running. Stop it and quit?") != QMessageBox::Yes) return false;
+    stopTool();
+    if (process_) process_->waitForFinished(4000);
+    return true;
+}
+CcuView::Mode CcuView::currentMode() const {
     return static_cast<Mode>(std::clamp(tabs_->currentIndex(), 0, kModes - 1));
 }
 
 // ---- pages ------------------------------------------------------------------------------------
 
 // A card with a title, a line of explanation and the two-column grid the settings go into.
-QWidget* MainWindow::card(const QString& title, const QString& text, QWidget**, Mode mode) {
+QWidget* CcuView::card(const QString& title, const QString& text, Mode mode) {
     auto* frame = new QFrame;
     frame->setObjectName("card");
     auto* v = new QVBoxLayout(frame);
@@ -290,7 +235,7 @@ QWidget* MainWindow::card(const QString& title, const QString& text, QWidget**, 
     return frame;
 }
 
-QWidget* MainWindow::buildPage(Mode mode) {
+QWidget* CcuView::buildPage(Mode mode) {
     static const char* titles[] = {"Install to a drive", "Set up on this system", "Export this machine"};
     static const char* texts[] = {
         "Wipes the drive: EFI boot partition, tty host system with Incus, and your desktop container (created on the first boot).",
@@ -300,7 +245,7 @@ QWidget* MainWindow::buildPage(Mode mode) {
     auto* page = new QWidget;
     auto* outer = new QVBoxLayout(page);
     outer->setContentsMargins(0, 10, 0, 0);
-    outer->addWidget(card(titles[mode], texts[mode], nullptr, mode));
+    outer->addWidget(card(titles[mode], texts[mode], mode));
 
     const QString imageFilter = "System images (*.tar *.tar.zst *.tar.xz *.tar.gz *.squashfs *.sfs *.erofs);;All files (*)";
     const auto isFile = [](QLineEdit* edit) { return [edit] { return QFileInfo(absolutize(edit->text())).isFile(); }; };
@@ -416,7 +361,7 @@ QWidget* MainWindow::buildPage(Mode mode) {
     return page;
 }
 
-void MainWindow::buildCommon(Mode mode) {
+void CcuView::buildCommon(Mode mode) {
     Common& c = common_[mode];
 
     c.user = new QLineEdit;
@@ -474,8 +419,8 @@ void MainWindow::buildCommon(Mode mode) {
     addRow(mode, "Display", c.display, {c.display}, true, [] { return true; });
 }
 
-// The ISO tab: exactly what the claudebackup ISO creator offers, plus writing the result to a USB stick.
-QWidget* MainWindow::buildIsoPage() {
+// The ISO tab: what the Backup ISO builder offers, run INSIDE a container.
+QWidget* CcuView::buildIsoPage() {
     auto* page = new QWidget;
     auto* outer = new QVBoxLayout(page);
     outer->setContentsMargins(0, 10, 0, 0);
@@ -487,7 +432,7 @@ QWidget* MainWindow::buildIsoPage() {
                         "(Arch, Debian, Fedora and openSUSE families). Users, settings and /home are cloned as they are. "
                         "Build ISO sets it up as a service: after the reboot it runs on the console with the progress display, "
                         "then the login screen appears.",
-                        nullptr, Iso), 3);
+                        Iso), 3);
 
     isoContainer_ = new QComboBox;
     isoContainer_->setEditable(true);
@@ -532,54 +477,25 @@ QWidget* MainWindow::buildIsoPage() {
     isoCache_->setChecked(true);
     addRow(Iso, "Clean caches", isoCache_, {isoCache_}, false, [this] { return isoCache_->isChecked(); });
 
-
-    // ---- write to USB ----
-    auto* usb = new QFrame;
-    usb->setObjectName("card");
-    usb->setFixedWidth(360);
-    auto* u = new QVBoxLayout(usb);
-    u->setContentsMargins(20, 14, 20, 14);
-    u->setSpacing(6);
-    u->addWidget(makeLabel("Write an ISO to USB", "h1"));
-    auto* usbText = makeLabel("Erases the whole target drive. Test the ISO in a VM (UEFI) first.", "muted");
-    usbText->setWordWrap(true);
-    u->addWidget(usbText);
-    usbIso_ = new QLineEdit;
-    usbIso_->setPlaceholderText("ISO file");
-    u->addSpacing(6);
-    u->addWidget(makeLabel("ISO file", "fieldLabel"));
-    u->addWidget(fileRow(usbIso_, false, "ISO files (*.iso);;All files (*)"));
-    u->addWidget(makeLabel("Target drive (WIPED)", "fieldLabel"));
-    usbDrive_ = new QComboBox;
-    auto* usbDriveRow = new QWidget;
-    auto* usbDriveLayout = new QHBoxLayout(usbDriveRow);
-    usbDriveLayout->setContentsMargins(0, 0, 0, 0);
-    auto* usbRefresh = new QPushButton("Refresh");
-    usbDriveLayout->addWidget(usbDrive_, 1);
-    usbDriveLayout->addWidget(usbRefresh);
-    u->addWidget(usbDriveRow);
-    auto* write = new QPushButton("Write to USB");
+    // ---- after the build: the ISO goes on a stick from Backup > Write USB (one USB writer for the suite) ----
+    auto* next = new QFrame;
+    next->setObjectName("card");
+    next->setFixedWidth(320);
+    auto* n = new QVBoxLayout(next);
+    n->setContentsMargins(20, 14, 20, 14);
+    n->setSpacing(6);
+    n->addWidget(makeLabel("Then: write it to USB", "h1"));
+    auto* nextText = makeLabel("The ISO is saved in the ISO folder after the reboot build. Put it on a stick with "
+                               "Backup > Write USB - test it in a VM (UEFI) first.", "muted");
+    nextText->setWordWrap(true);
+    n->addWidget(nextText);
+    n->addSpacing(6);
+    auto* write = new QPushButton("Open Write USB");
     write->setObjectName("accent");
-    u->addSpacing(6);
-    u->addWidget(write);
-    u->addStretch();
-    refreshDrives(usbDrive_);
-    connect(usbRefresh, &QPushButton::clicked, this, [this] { refreshDrives(usbDrive_); });
-    connect(write, &QPushButton::clicked, this, [this] {
-        const QString iso = absolutize(usbIso_->text());
-        const QString drive = usbDrive_->currentData().toString();
-        if (!QFileInfo(iso).isFile() || drive.isEmpty()) {
-            QMessageBox::information(this, "Write to USB", "Choose an ISO file and a target drive first.");
-            return;
-        }
-        bool accepted = false;
-        const QString typed = QInputDialog::getText(this, "Confirm the wipe",
-                                                    QString("ALL DATA on %1 will be destroyed.\n\nType the device path to confirm:").arg(drive),
-                                                    QLineEdit::Normal, QString(), &accepted);
-        if (!accepted || typed.trimmed() != drive) return;
-        runCli({"iso-usb", "--iso-file", iso, "--drive", drive, "--yes"}, Iso, "Writing the ISO to " + drive);
-    });
-    row->addWidget(usb, 0);
+    n->addWidget(write);
+    n->addStretch();
+    connect(write, &QPushButton::clicked, this, [this] { emit writeUsbRequested(savedIso_); });
+    row->addWidget(next, 0);
 
     outer->addLayout(row);
     outer->addStretch();
@@ -587,7 +503,7 @@ QWidget* MainWindow::buildIsoPage() {
 }
 
 // The Containers tab: what exists, which one the host session shows, duplicate and switch.
-QWidget* MainWindow::buildContainersPage() {
+QWidget* CcuView::buildContainersPage() {
     auto* page = new QWidget;
     auto* outer = new QHBoxLayout(page);
     outer->setContentsMargins(0, 10, 0, 0);
@@ -654,7 +570,7 @@ QWidget* MainWindow::buildContainersPage() {
     s->addStretch();
     outer->addWidget(side, 0);
 
-    connect(refreshB, &QPushButton::clicked, this, [this] { refreshContainers(); });
+    connect(refreshB, &QPushButton::clicked, this, [this] { refreshContainers(true); });
     connect(switchButton, &QPushButton::clicked, this, [this] {
         const QString name = selectedContainer();
         if (name.isEmpty()) return;
@@ -686,7 +602,7 @@ QWidget* MainWindow::buildContainersPage() {
     return page;
 }
 
-QWidget* MainWindow::addRow(Mode mode, const QString& label, QWidget* shown, const QList<QWidget*>& watched, bool required,
+QWidget* CcuView::addRow(Mode mode, const QString& label, QWidget* shown, const QList<QWidget*>& watched, bool required,
                             std::function<bool()> isSet, bool wide) {
     PageData& page = data_[mode];
     auto* cell = new QWidget;
@@ -719,7 +635,7 @@ QWidget* MainWindow::addRow(Mode mode, const QString& label, QWidget* shown, con
 }
 
 // Existing partitions (for installing next to another system): name, size, file system and label.
-void MainWindow::refreshPartitions(QComboBox* box) {
+void CcuView::refreshPartitions(QComboBox* box) {
     box->clear();
     QProcess lsblk;
     lsblk.start("lsblk", {"-pnP", "-o", "NAME,SIZE,FSTYPE,LABEL,TYPE"});
@@ -739,7 +655,7 @@ void MainWindow::refreshPartitions(QComboBox* box) {
     box->setCurrentIndex(-1);
 }
 
-QWidget* MainWindow::fileRow(QLineEdit* edit, bool save, const QString& filter, bool folder) {
+QWidget* CcuView::fileRow(QLineEdit* edit, bool save, const QString& filter, bool folder) {
     auto* row = new QWidget;
     auto* layout = new QHBoxLayout(row);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -757,7 +673,7 @@ QWidget* MainWindow::fileRow(QLineEdit* edit, bool save, const QString& filter, 
     return row;
 }
 
-void MainWindow::refreshDrives(QComboBox* box) {
+void CcuView::refreshDrives(QComboBox* box) {
     box->clear();
     QProcess lsblk;
     lsblk.start("lsblk", {"-dnpr", "-e", "1,7,11", "-o", "NAME,SIZE,MODEL"});
@@ -773,26 +689,65 @@ void MainWindow::refreshDrives(QComboBox* box) {
     box->setCurrentIndex(-1);
 }
 
-// Asks the tool for the containers (name, state, active) and fills the table and the ISO tab's list.
-void MainWindow::refreshContainers() {
-    if (!table_ || !isoContainer_) return;
-    QStringList names;
-    table_->setRowCount(0);
-    if (::geteuid() == 0) {
-        QProcess p;
-        p.start(backendPath(), {"containers", "--plain"});
-        if (p.waitForFinished(8000) && p.exitCode() == 0) {
-            for (const QString& line : QString::fromUtf8(p.readAllStandardOutput()).split('\n', Qt::SkipEmptyParts)) {
-                const QStringList f = line.split('\t');
-                if (f.size() < 2) continue;
-                const int row = table_->rowCount();
-                table_->insertRow(row);
-                table_->setItem(row, 0, new QTableWidgetItem(f[0]));
-                table_->setItem(row, 1, new QTableWidgetItem(f[1].toLower()));
-                table_->setItem(row, 2, new QTableWidgetItem(f.value(2) == "active" ? "ACTIVE" : ""));
-                names << f[0];
-            }
+// Asks the tool for the containers (name, state, active), without blocking the window. First as you
+// (works when you are in the incus-admin group); with askPassword, through pkexec when that fails.
+void CcuView::refreshContainers(bool askPassword) { listContainers(::geteuid() == 0, askPassword); }
+
+void CcuView::listContainers(bool elevated, bool askPassword) {
+    if (!table_ || !isoContainer_ || !available() || lister_) return;   // one listing at a time
+    QString program = cccuPath();
+    QStringList args = {"containers", "--plain"};
+    if (elevated && ::geteuid() != 0) {
+        program = QStandardPaths::findExecutable("pkexec");
+        if (program.isEmpty()) {
+            containerHint_->setText("pkexec (polkit) is not installed - it asks for the administrator password.");
+            return;
         }
+        args.prepend(cccuPath());   // pkexec needs the absolute path the polkit rule names
+    }
+    lister_ = new QProcess(this);
+    connect(lister_, &QProcess::finished, this, [this, elevated, askPassword](int code, QProcess::ExitStatus status) {
+        const QString out = QString::fromUtf8(lister_->readAllStandardOutput());
+        lister_->deleteLater();
+        lister_ = nullptr;
+        if (status == QProcess::NormalExit && code == 0) {
+            containerHint_->setText("The ACTIVE container is the one the host session (Container Plasma) shows.");
+            fillContainers(out);
+        } else if (!elevated && askPassword) {
+            listContainers(true, false);   // your user may not use Incus: ask for the password
+        } else if (!elevated) {
+            containerHint_->setText("Your user cannot list the containers (not in the incus-admin group). "
+                                    "Press Refresh - it asks for the administrator password.");
+            fillContainers(QString());
+        } else {
+            containerHint_->setText(code == 126 || code == 127 ? "Not listed: the administrator password was not given."
+                                                               : "The containers could not be listed - is Incus set up? (Install / Set up does it)");
+            fillContainers(QString());
+        }
+    });
+    connect(lister_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart || !lister_) return;
+        lister_->deleteLater();
+        lister_ = nullptr;
+        containerHint_->setText("Could not start " + cccuPath() + ".");
+    });
+    lister_->start(program, args);
+}
+// Fills the table and the ISO tab's container list from `cccu containers --plain`
+void CcuView::fillContainers(const QString& plainOutput) {
+    QStringList names;
+    const QString selected = selectedContainer();
+    table_->setRowCount(0);
+    for (const QString& line : plainOutput.split('\n', Qt::SkipEmptyParts)) {
+        const QStringList f = line.split('\t');
+        if (f.size() < 2) continue;
+        const int row = table_->rowCount();
+        table_->insertRow(row);
+        table_->setItem(row, 0, new QTableWidgetItem(f[0]));
+        table_->setItem(row, 1, new QTableWidgetItem(f[1].toLower()));
+        table_->setItem(row, 2, new QTableWidgetItem(f.value(2) == "active" ? "ACTIVE" : ""));
+        if (f[0] == selected) table_->selectRow(row);
+        names << f[0];
     }
     if (table_->rowCount() > 0 && table_->currentRow() < 0) table_->selectRow(0);
 
@@ -805,14 +760,14 @@ void MainWindow::refreshContainers() {
     refreshStatus();
 }
 
-QString MainWindow::selectedContainer() const {
-    const int row = table_->currentRow();
-    return row < 0 ? QString() : table_->item(row, 0)->text();
+QString CcuView::selectedContainer() const {
+    const int row = table_ ? table_->currentRow() : -1;
+    return row < 0 || !table_->item(row, 0) ? QString() : table_->item(row, 0)->text();
 }
 
 // ---- status -----------------------------------------------------------------------------------
 
-int MainWindow::missing(Mode mode) const {
+int CcuView::missing(Mode mode) const {
     int count = 0;
     for (const Field& f : data_[mode].fields) {
         if (f.required && !f.isSet()) ++count;
@@ -820,7 +775,7 @@ int MainWindow::missing(Mode mode) const {
     return count;
 }
 
-void MainWindow::refreshStatus() {
+void CcuView::refreshStatus() {
     if (!startButton_ || !summary_ || !tabs_) return;   // the window is still being built
     for (const PageData& page : data_) {
         for (const Field& f : page.fields) {
@@ -840,17 +795,12 @@ void MainWindow::refreshStatus() {
     summary_->setProperty("state", n == 0 ? "ok" : "bad");
     summary_->style()->unpolish(summary_);
     summary_->style()->polish(summary_);
-    startButton_->setEnabled(n == 0 && !running_ && ::geteuid() == 0);
+    startButton_->setEnabled(n == 0 && !running_);
 }
 
 // ---- running the backend ----------------------------------------------------------------------
 
-QString MainWindow::backendPath() const {
-    const QString next = QCoreApplication::applicationDirPath() + "/cccu";
-    return QFileInfo(next).isExecutable() ? next : QString("cccu");
-}
-
-QStringList MainWindow::buildArgs(Mode mode) const {
+QStringList CcuView::buildArgs(Mode mode) const {
     QStringList args;
     if (mode == Export) {
         args << "--export" << absolutize(exportPath_->text());
@@ -897,7 +847,7 @@ QStringList MainWindow::buildArgs(Mode mode) const {
     return args;
 }
 
-void MainWindow::start() {
+void CcuView::start() {
     const Mode mode = currentMode();
     if (mode == Containers || missing(mode) != 0 || running_) return;
 
@@ -935,21 +885,37 @@ void MainWindow::start() {
     runCli(buildArgs(mode), mode, "Starting ...");
 }
 
-// Runs the cccu tool with `args` and follows its output. Passwords go through the environment only.
-void MainWindow::runCli(const QStringList& args, Mode mode, const QString& title) {
+// Runs the cccu tool with `args` as root (pkexec asks for the password) and follows its output.
+// The passwords of the new users go through stdin (--secrets-stdin), never the command line.
+void CcuView::runCli(const QStringList& args, Mode mode, const QString& title) {
     if (running_) return;
+    QStringList toolArgs = args;
+    secrets_.clear();
+    if (mode == Install || mode == Running) {
+        toolArgs << "--secrets-stdin";
+        secrets_ = common_[mode].pass->text().toUtf8() + '\n' + (mode == Install ? rootPass_->text().toUtf8() : QByteArray()) + '\n';
+    }
+    QString program = cccuPath();
+    QStringList programArgs = toolArgs;
+    if (::geteuid() != 0) {
+        program = QStandardPaths::findExecutable("pkexec");
+        if (program.isEmpty()) {
+            QMessageBox::warning(this, "Containers", "pkexec (polkit) is not installed - it asks for the administrator password.");
+            return;
+        }
+        programArgs.prepend(cccuPath());   // the absolute path the polkit rule names
+    }
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert("NO_COLOR", "1");
-    if (mode == Install || mode == Running) env.insert("CCCU_USER_PASSWORD", common_[mode].pass->text());
-    if (mode == Install) env.insert("CCCU_ROOT_PASSWORD", rootPass_->text());
 
     log_->clear();
     pending_.clear();
     result_->clear();
+    result_->setStyleSheet(QString());
     savedIso_.clear();
     bar_->setRange(0, 1);
     bar_->setValue(0);
-    stepLabel_->setText(title);
+    stepLabel_->setText(::geteuid() != 0 ? title + "   (waiting for the administrator password)" : title);
     runningMode_ = mode;
     consoleRun_ = args.contains("--on-console");
     rebootRun_ = args.contains("--on-reboot");
@@ -958,32 +924,51 @@ void MainWindow::runCli(const QStringList& args, Mode mode, const QString& title
     process_->setProcessEnvironment(env);
     process_->setProcessChannelMode(QProcess::MergedChannels);
     connect(process_, &QProcess::readyRead, this, [this] { readOutput(); });
-    connect(process_, &QProcess::started, this, [this] { process_->closeWriteChannel(); });   // no prompt can wait for input
+    connect(process_, &QProcess::started, this, [this] {
+        if (!secrets_.isEmpty()) process_->write(secrets_);
+        secrets_.fill('\0');
+        secrets_.clear();
+        process_->closeWriteChannel();   // no prompt can wait for input
+    });
     connect(process_, &QProcess::finished, this, [this](int code, QProcess::ExitStatus status) { finished(code, status); });
     connect(process_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         if (error != QProcess::FailedToStart) return;
-        appendLog("Could not start " + backendPath() + " - build it with the main CMake target and keep it next to cccu-gui.", "#ff6b6b", true);
+        appendLog("Could not start " + process_->program() + " - is Claude Codex CCU installed? (./build.sh)", "#ff6b6b", true);
+        process_->deleteLater();
+        process_ = nullptr;
         setRunning(false);
     });
 
-    appendLog("$ cccu " + args.join(' '), "#8b93a1");
+    appendLog("$ cccu " + args.join(' '), "#8a909c");
     setRunning(true);
-    process_->start(backendPath(), args);
+    process_->start(program, programArgs);
 }
-
-void MainWindow::cancel() {
+void CcuView::cancel() {
     if (!process_ || !running_) return;
     const auto answer = QMessageBox::warning(this, "Cancel",
                                              "Stop the running operation?\nCancelling a drive install can leave the drive half-written.",
                                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     if (answer != QMessageBox::Yes) return;
-    process_->terminate();
-    QTimer::singleShot(4000, this, [p = QPointer<QProcess>(process_)] {
+    stopTool();
+}
+
+// Stops the running tool. It runs as root (pkexec), so your user cannot signal it: kill asks for the
+// password once more. As root it is stopped directly.
+void CcuView::stopTool() {
+    if (!process_ || process_->state() == QProcess::NotRunning) return;
+    const qint64 pid = process_->processId();
+    if (::geteuid() == 0 || pid <= 0) {
+        process_->terminate();
+    } else {
+        const QString pkexec = QStandardPaths::findExecutable("pkexec");
+        if (!pkexec.isEmpty()) QProcess::startDetached(pkexec, {"/bin/kill", "-TERM", QString::number(pid)});
+    }
+    QTimer::singleShot(6000, this, [p = QPointer<QProcess>(process_)] {
         if (p && p->state() != QProcess::NotRunning) p->kill();
     });
 }
 
-void MainWindow::readOutput() {
+void CcuView::readOutput() {
     pending_ += process_->readAll();
     pending_.replace('\r', '\n');   // rsync and friends redraw their progress line with carriage returns
     for (qsizetype nl; (nl = pending_.indexOf('\n')) >= 0;) {
@@ -992,9 +977,10 @@ void MainWindow::readOutput() {
     }
 }
 
-void MainWindow::handleLine(const QString& rawLine) {
+void CcuView::handleLine(const QString& rawLine) {
     QString line = rawLine;
     line.remove('\r');
+    line = stripAnsi(line);
     if (line.contains(QChar(0x2588)) || line.contains(QChar(0x2591))) return;   // the text progress bar: the GUI has its own
 
     // "    ... 42%": progress inside the current step (the bar is 100 units per step).
@@ -1037,7 +1023,7 @@ void MainWindow::handleLine(const QString& rawLine) {
     }
 }
 
-void MainWindow::finished(int code, QProcess::ExitStatus status) {
+void CcuView::finished(int code, QProcess::ExitStatus status) {
     readOutput();   // whatever the process printed last
     if (!pending_.isEmpty()) handleLine(QString::fromUtf8(pending_));
     pending_.clear();
@@ -1057,7 +1043,9 @@ void MainWindow::finished(int code, QProcess::ExitStatus status) {
     }
     if (success) bar_->setValue(bar_->maximum());
     stepLabel_->setText(success ? "Finished." : "Stopped.");
-    result_->setText(success ? "Completed successfully." : QString("Failed (exit code %1). See the log and /var/log/cccu/.").arg(code));
+    result_->setText(success ? "Completed successfully."
+                     : (code == 126 || code == 127) && ::geteuid() != 0 ? QString("Not started: the administrator password was not given.")
+                     : QString("Failed (exit code %1). See the log and /var/log/cccu/.").arg(code));
     result_->setStyleSheet(success ? "color:#4cd964; font-weight:600;" : "color:#ff6b6b; font-weight:600;");
 
     if (success && !savedTo.isEmpty()) {
@@ -1083,14 +1071,14 @@ void MainWindow::finished(int code, QProcess::ExitStatus status) {
                                      "Follow it there or with: journalctl -u cccu-iso -f");
         } else if (!savedIso_.isEmpty()) {
             result_->setText("ISO saved: " + savedIso_);
-            usbIso_->setText(savedIso_);
-            QMessageBox::information(this, "ISO ready", "The ISO was saved to:\n\n" + savedIso_);
+            if (QMessageBox::question(this, "ISO ready", "The ISO was saved to:\n\n" + savedIso_ + "\n\nWrite it to a USB drive now?") == QMessageBox::Yes)
+                emit writeUsbRequested(savedIso_);
         }
     }
-    if (runningMode_ == Containers || runningMode_ == Iso) refreshContainers();
+    if (runningMode_ == Containers || runningMode_ == Iso) refreshContainers(false);
 }
 
-void MainWindow::setRunning(bool running) {
+void CcuView::setRunning(bool running) {
     running_ = running;
     if (auto* bar = tabs_->findChild<QTabBar*>()) bar->setEnabled(!running);
     for (int i = 0; i < tabs_->count(); ++i) tabs_->widget(i)->setEnabled(!running);
@@ -1099,7 +1087,7 @@ void MainWindow::setRunning(bool running) {
     refreshStatus();
 }
 
-void MainWindow::appendLog(const QString& text, const QString& color, bool bold) {
+void CcuView::appendLog(const QString& text, const QString& color, bool bold) {
     log_->appendHtml(QString("<span style=\"color:%1; white-space:pre;%2\">%3</span>")
                          .arg(color, QString(bold ? " font-weight:600;" : ""), text.toHtmlEscaped()));
 }

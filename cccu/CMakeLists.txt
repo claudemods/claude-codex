@@ -101,21 +101,5 @@ target_compile_definitions(cccu PRIVATE
 
 install(TARGETS cccu RUNTIME DESTINATION bin)
 
-# Qt6 desktop version (cccu-gui): a front-end that runs the cccu command line tool.
-#   cmake -S . -B build -DCCCU_BUILD_GUI=ON && cmake --build build -j
-option(CCCU_BUILD_GUI "Build the Qt6 GUI (cccu-gui)" OFF)
-if(CCCU_BUILD_GUI)
-  find_package(Qt6 REQUIRED COMPONENTS Widgets)
-  set(CMAKE_AUTOMOC ON)
-  add_executable(cccu-gui gui/main.cpp gui/mainwindow.cpp gui/mainwindow.hpp)
-  target_compile_definitions(cccu-gui PRIVATE CCCU_GUI_VERSION="${PROJECT_VERSION}" CCCU_DATE="${CCCU_RELEASE_DATE}")
-  target_link_libraries(cccu-gui PRIVATE Qt6::Widgets)
-  add_dependencies(cccu-gui cccu)   # the GUI needs the backend next to it
-  install(TARGETS cccu-gui RUNTIME DESTINATION bin)
-
-  # Application-menu entry and icon, so the GUI is started by clicking (it asks for the password itself).
-  include(GNUInstallDirs)
-  configure_file(packaging/cccu.desktop.in ${CMAKE_BINARY_DIR}/cccu.desktop @ONLY)
-  install(FILES ${CMAKE_BINARY_DIR}/cccu.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-  install(FILES packaging/cccu.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
-endif()
+# The window is Claude Codex Cloner (../app): its Containers tab runs this tool through pkexec.
+# The polkit rule for /usr/local/bin/cccu is installed by the compendium's build.sh.

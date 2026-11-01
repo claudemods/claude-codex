@@ -1,21 +1,22 @@
 // SPDX-FileCopyrightText: claudemods
 // SPDX-License-Identifier: MIT
 //
-// Claude Codex Backup (Qt6): the main window. A sidebar of pages:
+// Claude Codex Cloner - the Backup tab: clone this running system into a bootable live ISO.
+// A sidebar of pages:
 //   Overview      what is ready on this system, with fixes, and quick actions
-//   Build ISO     the build steps, progress and live log
+//   Build ISO     the build steps, progress and live log (or build it from init on the next boot)
 //   Settings      ISO name, directories, image type, compression, boot options
-//   Edit Configs  GRUB / boot text / initramfs copies and the Claude Codex Install configuration
-//   Write USB     put an ISO on a drive
+//   Edit Configs  GRUB / boot text / initramfs files and the Claude Codex Install configuration
+//   Write USB     put an ISO on a drive (also the ISOs made on the Containers tab)
 //   Install       in the live ISO: Claude Codex Install (or the Alpine installer) puts the clone on a disk
-//   Guide         the cloner's guide for this distro
-//   Maintenance   updates, mkinitcpio config, log
+//   Maintenance   mkinitcpio config, log, settings folder
+// The distro guide is on the window's Guide tab, updates on its Updates tab.
 
 #pragma once
 
 #include "Backend.h"
 
-#include <QMainWindow>
+#include <QWidget>
 
 class QCheckBox;
 class QComboBox;
@@ -31,14 +32,19 @@ class QStackedWidget;
 class QVBoxLayout;
 class TaskPanel;
 
-class MainWindow : public QMainWindow
+class BackupView : public QWidget
 {
     Q_OBJECT
 public:
-    explicit MainWindow( QWidget* parent = nullptr );
+    explicit BackupView( QWidget* parent = nullptr );
 
-protected:
-    void closeEvent( QCloseEvent* event ) override;
+    bool confirmClose();                        // the window is closing: false keeps it open
+    bool isBusy() const { return m_backend->isRunning(); }
+    void showWriteUsb( const QString& iso );    // Write USB, with this ISO selected
+    QString guideText() const;                  // the cloner's guide for this distro
+
+Q_SIGNALS:
+    void updatesRequested();                    // "Open Updates" on the Maintenance page
 
 private:
     enum Page
@@ -49,7 +55,6 @@ private:
         Configs,
         Usb,
         Install,
-        Guide,
         Maintenance
     };
 
@@ -59,7 +64,6 @@ private:
     QWidget* makeConfigsPage();
     QWidget* makeUsbPage();
     QWidget* makeInstallPage();
-    QWidget* makeGuidePage();
     QWidget* makeMaintenancePage();
 
     void refreshStatus();
@@ -81,7 +85,6 @@ private:
     void writeUsb();
     void launchInstaller();
     void installAlpine();
-    void checkForUpdates();
 
     QString isoOutputDir() const;
     QString humanSize( qint64 bytes ) const;
@@ -152,12 +155,8 @@ private:
     QComboBox* m_alpineFs = nullptr;
     TaskPanel* m_installTask = nullptr;
 
-    // Guide
-    QPlainTextEdit* m_guide = nullptr;
-
     // Maintenance
     QLabel* m_versionLabel = nullptr;
-    QLabel* m_updateLabel = nullptr;
     QPushButton* m_mkinitcpio = nullptr;
     TaskPanel* m_maintTask = nullptr;
 };

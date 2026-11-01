@@ -416,7 +416,7 @@ std::string isoOutputDir() {
     return mcfg.outputDir.empty() ? (mcfg.workDir.empty() ? DEFAULT_WORK_DIR : mcfg.workDir) : mcfg.outputDir;
 }
 
-// Builds the ISO with the saved settings; shared by the menu and the Qt6 app (--build-iso)
+// Builds the ISO with the saved settings; shared by the menu and Claude Codex Cloner (--build-iso)
 bool buildISO() {
     bool ok = remaster::run(currentOptions());
     // Folders the build created as root, in the user's home or not, belong to the user
@@ -449,7 +449,7 @@ bool holdsRunningSystem(const std::string& device) {
     return false;
 }
 
-// dd an ISO onto a whole drive; shared by the menu and the Qt6 app (--write-usb)
+// dd an ISO onto a whole drive; shared by the menu and Claude Codex Cloner (--write-usb)
 bool writeIsoToDevice(const std::string& iso, const std::string& target) {
     struct stat st;
     if (!isRegularFile(iso)) { logError("ISO not found: " + iso); return false; }

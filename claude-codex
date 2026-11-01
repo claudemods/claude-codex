@@ -1,0 +1,238 @@
+#!/bin/sh
+# claude-codex - the one command of Claude Codex Compendium (installed by build.sh to /usr/local/bin).
+#
+#   claude-codex                   a menu of everything
+#   claude-codex cloner            Claude Codex Cloner, the window (Backup, Containers, Updates, Guide)
+#   claude-codex backup [args]     Claude Codex Backup: the cloner's terminal menu, or its batch commands
+#   claude-codex ccu [args]        Claude Codex CCU: the container creator (as root)
+#   claude-codex install [--tui]   Claude Codex Install: the installer (as root)
+#   claude-codex status [--plain]  what is installed, and the choices of the last build
+#   claude-codex update [--check] [--yes] [--force] [--branch NAME]
+#                                  update everything: download the latest release from GitHub and run its
+#                                  build.sh with the choices of the last build (/etc/claude-codex/build.conf)
+#   claude-codex version | help
+# Plain POSIX sh (also on Alpine).
+
+REPO="claudemods/claude-codex"
+INFO=/usr/share/claude-codex/release     # written by build.sh: release, version, built, source, options
+CONF=/etc/claude-codex/build.conf        # written by build.sh: FLAGS=... (its answers, as options)
+CACHE=/var/cache/claude-codex            # where the updater keeps the source it builds
+SELF=$(command -v "$0" 2>/dev/null || echo "$0")
+case "$SELF" in /*) ;; *) SELF="$(cd "$(dirname "$SELF")" && pwd)/$(basename "$SELF")" ;; esac
+
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    R='\033[1;31m'; G='\033[1;92m'; Y='\033[1;33m'; W='\033[1;97m'; D='\033[0;32m'; M='\033[0;90m'; N='\033[0m'
+else
+    R=''; G=''; Y=''; W=''; D=''; M=''; N=''
+fi
+say()    { printf "${R}==>${N} %s\n" "$*"; }
+die()    { printf "${R}error:${N} %s\n" "$*" >&2; exit 1; }
+banner() { printf "\n${R}=====${W} %s ${R}=====${N}\n" "$*"; }
+
+# The value of KEY in the release file
+info() { sed -n "s/^$1=//p" "$INFO" 2>/dev/null | head -n 1; }
+release() { r=$(info release); [ -n "$r" ] || r="Compendium v1.0 01-11-2026"; echo "$r"; }
+
+# Root for one command: sudo / doas / run0 in a terminal, pkexec from a desktop
+as_root() {
+    if [ "$(id -u)" -eq 0 ]; then "$@"
+    elif [ -t 0 ] && command -v sudo >/dev/null 2>&1; then sudo "$@"
+    elif [ -t 0 ] && command -v doas >/dev/null 2>&1; then doas "$@"
+    elif [ -t 0 ] && command -v run0 >/dev/null 2>&1; then run0 "$@"
+    elif command -v pkexec >/dev/null 2>&1; then pkexec "$@"
+    elif command -v sudo >/dev/null 2>&1; then sudo "$@"
+    else die "this needs root: run it as root (no sudo, doas, run0 or pkexec found)"
+    fi
+}
+
+need() { command -v "$1" >/dev/null 2>&1 || die "$1 is not installed - run ./build.sh from the compendium folder${2:+ ($2)}"; }
+
+# ---- status -------------------------------------------------------------------------------------
+TOOLS="Claude Codex Cloner|claude-codex-cloner
+Claude Codex Backup|claudebackup-linux
+Claude Codex Install|claudeinstall
+Claude Codex Install (terminal)|claudeinstall-tui
+Claude Codex CCU|cccu"
+
+flags() { sed -n 's/^FLAGS=//p' "$CONF" 2>/dev/null | head -n 1 | sed 's/^"//; s/"$//'; }
+
+status_plain() {
+    echo "release=$(release)"
+    echo "version=$(info version)"
+    echo "built=$(info built)"
+    echo "source=$(info source)"
+    echo "options=$(flags)"
+    printf '%s\n' "$TOOLS" | while IFS='|' read -r name cmd; do
+        echo "tool=$name|$cmd|$(command -v "$cmd" 2>/dev/null)"
+    done
+}
+
+status() {
+    printf "\n  ${W}Claude Codex${N} ${R}%s${N}\n" "$(release)"
+    v=$(info version); b=$(info built)
+    [ -n "$v" ] && printf "  ${M}version %s%s${N}\n" "$v" "${b:+, built $b}"
+    printf '\n'
+    printf '%s\n' "$TOOLS" | while IFS='|' read -r name cmd; do
+        p=$(command -v "$cmd" 2>/dev/null)
+        if [ -n "$p" ]; then printf "  ${W}%-34s${N} ${G}%-14s${N} %s\n" "$name" "installed" "$cmd"
+        else                 printf "  ${W}%-34s${N} ${Y}%-14s${N} %s\n" "$name" "not installed" "$cmd"; fi
+    done
+    f=$(flags)
+    printf "\n  ${M}build choices: %s${N}\n" "${f:-(none saved - run ./build.sh)}"
+    printf "  ${M}source:        %s${N}\n\n" "$(info source)"
+}
+
+# ---- update -------------------------------------------------------------------------------------
+fetch() { curl -fsSL --max-time 15 "$1" 2>/dev/null || wget -q -T 15 -O- "$1" 2>/dev/null; }
+
+latest_version() {
+    fetch "https://raw.githubusercontent.com/$REPO/$1/VERSION" | head -n 1 | tr -d ' \r\t'
+}
+
+# True when version $1 is higher than $2 (1.10 > 1.9; a leading v is ignored)
+newer() {
+    a=${1#v}; b=${2#v}
+    [ -n "$a" ] && [ "$a" != "$b" ] && [ "$(printf '%s\n%s\n' "$a" "$b" | sort -V | tail -n 1)" = "$a" ]
+}
+
+update() {
+    CHECK=0; YES=0; FORCE=0; BRANCH=main
+    ORIG="$*"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --check)    CHECK=1 ;;
+            --yes|-y)   YES=1 ;;
+            --force)    FORCE=1 ;;
+            --branch)   shift; BRANCH="${1:-main}" ;;
+            --branch=*) BRANCH="${1#--branch=}" ;;
+            *) die "unknown update option: $1 (see claude-codex help)" ;;
+        esac
+        shift
+    done
+    INSTALLED=$(info version)
+    LATEST=$(latest_version "$BRANCH")
+
+    if [ "$CHECK" = 1 ]; then
+        echo "installed=${INSTALLED:-unknown}"
+        echo "latest=$LATEST"
+        if newer "$LATEST" "$INSTALLED"; then echo "newer=1"; else echo "newer=0"; fi
+        [ -n "$LATEST" ] || exit 2
+        exit 0
+    fi
+
+    if [ "$(id -u)" -ne 0 ]; then
+        say "The update installs into the system: asking for the administrator password"
+        # shellcheck disable=SC2086
+        exec_root=$(command -v sudo || command -v doas || true)
+        if [ -t 0 ] && [ -n "$exec_root" ]; then exec "$exec_root" "$SELF" update $ORIG; fi
+        command -v pkexec >/dev/null 2>&1 && exec pkexec "$SELF" update $ORIG
+        die "run it as root: sudo claude-codex update"
+    fi
+    # From the window (no terminal): its own process group, so Cancel can stop build.sh and the compiler
+    if [ ! -t 0 ] && [ -z "${CLAUDE_CODEX_SETSID:-}" ] && command -v setsid >/dev/null 2>&1; then
+        CLAUDE_CODEX_SETSID=1 exec setsid "$SELF" update $ORIG
+    fi
+
+    printf "\n  ${W}Claude Codex${N} - update\n"
+    printf "  installed: ${W}%s${N}   latest on GitHub (%s): ${W}%s${N}\n\n" "${INSTALLED:-unknown}" "$BRANCH" "${LATEST:-?}"
+    [ -n "$LATEST" ] || [ "$FORCE" = 1 ] || die "GitHub could not be reached (offline?) - nothing was changed"
+    if [ "$FORCE" != 1 ] && ! newer "$LATEST" "$INSTALLED"; then
+        printf "${G}Everything is up to date.${N} (claude-codex update --force rebuilds it anyway)\n"
+        exit 0
+    fi
+    if [ "$YES" != 1 ] && [ -t 0 ]; then
+        printf "${G}Download %s and rebuild every Claude Codex tool now? [Y/n]${N} " "${LATEST:-the latest source}"
+        read -r reply
+        case "$reply" in n|N|no|NO) echo "Nothing was changed."; exit 0 ;; esac
+    fi
+
+    banner "DOWNLOAD  claude-codex ($BRANCH) from github.com/$REPO"
+    mkdir -p "$CACHE" || die "cannot create $CACHE"
+    rm -rf "$CACHE/new"
+    if command -v git >/dev/null 2>&1; then
+        git clone --depth 1 --branch "$BRANCH" "https://github.com/$REPO.git" "$CACHE/new" ||
+            die "the download failed - check the internet connection"
+    else
+        mkdir -p "$CACHE/new"
+        fetch "https://github.com/$REPO/archive/refs/heads/$BRANCH.tar.gz" | tar -xz --strip-components=1 -C "$CACHE/new" ||
+            die "the download failed - check the internet connection"
+    fi
+    [ -f "$CACHE/new/build.sh" ] || die "the download has no build.sh"
+
+    # Build in $CACHE/source (the release file then names it as the source); the previous one is kept
+    # until the new one is installed
+    rm -rf "$CACHE/source.old"
+    [ -d "$CACHE/source" ] && mv "$CACHE/source" "$CACHE/source.old"
+    mv "$CACHE/new" "$CACHE/source"
+    FLAGS=$(flags)
+    say "Running build.sh --yes ${FLAGS:-(defaults: no build choices saved)}"
+    cd "$CACHE/source" || die "cannot enter $CACHE/source"
+    # shellcheck disable=SC2086
+    if sh ./build.sh --yes $FLAGS; then
+        rm -rf "$CACHE/source.old"
+        printf "\n${G}Claude Codex is updated to %s.${N} Restart Claude Codex Cloner if it is open.\n" "$(info version)"
+        exit 0
+    fi
+    RC=$?
+    printf "\n${R}The update did not finish (exit code %s).${N} What did not compile was not installed - the old version of it stays.\n" "$RC"
+    exit "$RC"
+}
+
+# ---- the tools ----------------------------------------------------------------------------------
+run_cloner() { need claude-codex-cloner "the Qt6 window"; exec claude-codex-cloner "$@"; }
+run_backup() { need claudebackup-linux; exec claudebackup-linux "$@"; }
+run_ccu() {
+    need cccu "Arch, Debian/Ubuntu, Fedora and openSUSE, GCC 14+"
+    if [ "$(id -u)" -eq 0 ]; then exec cccu "$@"; fi
+    as_root "$(command -v cccu)" "$@"
+}
+run_install() {
+    if [ "${1:-}" = "--tui" ]; then
+        shift
+        need claudeinstall-tui "build.sh: installer interface tui or both"
+        as_root "$(command -v claudeinstall-tui)" "$@"
+        return
+    fi
+    # the live ISO's launcher: matches the image type, keeps the display, logs to /tmp
+    if command -v claudebackup-install >/dev/null 2>&1; then exec claudebackup-install "$@"; fi
+    need claudeinstall
+    as_root "$(command -v claudeinstall)" "$@"
+}
+
+menu() {
+    while :; do
+        printf "\n  ${W}Claude${N} ${R}Codex${N}  ${M}%s${N}\n\n" "$(release)"
+        printf "  ${W}1${N})  Claude Codex Cloner      ${M}the window: Backup, Containers, Updates, Guide${N}\n"
+        printf "  ${W}2${N})  Claude Codex Backup      ${M}clone this system into a live ISO (terminal menu)${N}\n"
+        printf "  ${W}3${N})  Claude Codex CCU         ${M}clone it into an Incus container (terminal menu)${N}\n"
+        printf "  ${W}4${N})  Claude Codex Install     ${M}install a cloned system to a disk${N}\n"
+        printf "  ${W}5${N})  Status                   ${M}what is installed${N}\n"
+        printf "  ${W}6${N})  Update everything        ${M}check GitHub and rebuild the suite${N}\n"
+        printf "  ${W}0${N})  Quit\n\n"
+        printf "${G}Choice:${N} "
+        read -r c || exit 0
+        case "$c" in
+            1) (run_cloner >/dev/null 2>&1 &) ; say "Claude Codex Cloner is starting" ;;
+            2) (run_backup) ;;
+            3) (run_ccu) ;;
+            4) (run_install) ;;
+            5) status ;;
+            6) (update) ;;
+            0|q|Q|"") exit 0 ;;
+            *) say "pick 0 to 6" ;;
+        esac
+    done
+}
+
+case "${1:-}" in
+    "")                     menu ;;
+    cloner|gui|window)      shift; run_cloner "$@" ;;
+    backup|cloner-cli)      shift; run_backup "$@" ;;
+    ccu|cccu|containers)    shift; run_ccu "$@" ;;
+    install|installer)      shift; run_install "$@" ;;
+    status)                 if [ "${2:-}" = "--plain" ]; then status_plain; else status; fi ;;
+    update|upgrade)         shift; update "$@" ;;
+    version|--version|-V)   echo "Claude Codex $(release) (version $(info version))" ;;
+    help|--help|-h)         sed -n '2,/^# Plain POSIX/p' "$SELF" | sed '$d' | sed 's/^# \{0,1\}//' ;;
+    *)                      die "unknown command: $1 (claude-codex help)" ;;
+esac

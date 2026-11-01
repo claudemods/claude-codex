@@ -22,7 +22,7 @@
     <img src="https://img.shields.io/badge/Built_Using-Claude_Code-D97757?style=for-the-badge&logo=claude&logoColor=white" alt="Built Using Claude Code">
   </a>
 
-  ## [ Guide ](#quick-start)
+  ## [ Guide ](#guide)
 
   ## [ Support Me ](https://www.paypal.com/paypalme/claudemods?country.x=GB&locale)
 
@@ -45,299 +45,398 @@
 
 ![C++](https://img.shields.io/badge/C++-17%20%2F%2023-blue) ![Qt](https://img.shields.io/badge/Qt-6-green) ![Status](https://img.shields.io/badge/status-beta-orange) ![License](https://img.shields.io/badge/license-MIT-green)
 
+**Clone your running Linux into a bootable live ISO or an Incus container — then install it back to disk.**<br>
+One window, one command, one build script, one updater.
+
 </div>
 
-Clone your running Linux system into a bootable live ISO or into an Incus container, and install
-the clone back onto a disk from the live ISO, with one build script.
+---
+
+## Contents
+
+- [What it is](#what-it-is)
+- [The tools](#the-tools)
+- [Quick start](#quick-start)
+- [Guide](#guide)
+  - [Claude Codex Cloner — the window](#claude-codex-cloner--the-window)
+  - [Build a live ISO](#build-a-live-iso)
+  - [Build the ISO from init (on the next boot)](#build-the-iso-from-init-on-the-next-boot)
+  - [Write a USB stick](#write-a-usb-stick)
+  - [Install the clone to a disk](#install-the-clone-to-a-disk)
+  - [Containers (Claude Codex CCU)](#containers-claude-codex-ccu)
+  - [Updates](#updates)
+  - [Commands](#commands)
+- [build.sh in detail](#buildsh-in-detail)
+- [Supported distributions](#supported-distributions)
+- [How the pieces fit](#how-the-pieces-fit)
+- [How four projects became one](#how-four-projects-became-one)
+- [Troubleshooting and logs](#troubleshooting-and-logs)
+- [Requirements](#requirements)
+
+---
+
+## What it is
+
+```
+                        ┌──────────────────── Claude Codex Cloner (one window) ────────────────────┐
+                        │   Backup  ·  Containers  ·  Updates  ·  Guide                            │
+                        └───────────┬──────────────────────────┬────────────────────────────────────┘
+                                    │                          │
+        your running system ── Claude Codex Backup ──▶ live ISO ──▶ USB stick ──▶ Claude Codex Install ──▶ new disk
+                    │                                     ▲
+                    └── Claude Codex CCU ──▶ Incus container ─┘  (Create ISO: the same engine, inside the container)
+```
+
+- The ISO is a **full clone**: your users, passwords, settings and `/home` go in exactly as they
+  are. No live account is added, and the installer has no users page.
+- **One engine** (`cloner/src`) builds every ISO — on the host and inside containers.
+- **One installer** (Claude Codex Install, formerly ClaudeInstall) replaces Calamares everywhere.
+- **One window** (Claude Codex Cloner), **one command** (`claude-codex`), **one build script**
+  (`./build.sh`) and **one updater** (`claude-codex update`).
 
 ## The tools
 
 Every tool shows **Compendium v1.0 01-11-2026** in its window, banner, About box or `--help`.
 
-| Tool | What it does | Commands | Folder | Came from |
-|---|---|---|---|---|
-| **Claude Codex Backup** | clones the running system into a bootable live ISO; terminal menu and Qt6 app. Its engine is also what Claude Codex CCU uses | `claude-codex-backup` (`claudebackup-linux`), `claude-codex-backup-gui` (`claudebackup-linux-qt6`) | `cloner/`, `cloner-qt6/` | claudebackup-linux (+ the new Qt6 app) |
-| **Claude Codex Install** | the installer (ClaudeInstall): installs the clone from the live ISO, a new system, or claudemods distros online | `claude-codex-install` (`claudeinstall`), `claude-codex-install-tui` (`claudeinstall-tui`) | `installer/` | claudeinstall-linux |
-| **Claude Codex CCU** | Container Creator Utility: clones the system into an Incus container and builds live ISOs of containers | `claude-codex-ccu` (`cccu`), `claude-codex-ccu-gui` (`cccu-gui`) | `cccu/` | CCCU |
-| `build.sh` | builds, installs and configures all of the above | | | replaces the separate build scripts |
+| Tool | What it does | Start it | Folder |
+|---|---|---|---|
+| **Claude Codex Cloner** | the window: Backup, Containers, Updates and Guide in tabs | `claude-codex-cloner`, or *Claude Codex Cloner* in the applications menu | `app/` |
+| **Claude Codex Backup** | clones the running system into a bootable live ISO, writes USB sticks; also a terminal menu and batch commands | the **Backup** tab · `claude-codex backup` (`claudebackup-linux`) | `cloner/` |
+| **Claude Codex Install** | the installer: puts the clone on a disk (or installs a new system, or claudemods distros online) | *Install &lt;distro&gt;* on the live desktop · `claude-codex install` (`claudeinstall`, `claudeinstall-tui`) | `installer/` |
+| **Claude Codex CCU** | the Container Creator Utility: clones the system into an Incus container, installs that setup to a drive, exports images, ISOs of containers | the **Containers** tab · `claude-codex ccu` (`cccu`) | `cccu/` |
+| **claude-codex** | the one command: a menu of everything, status, update | `claude-codex` | `claude-codex` |
+| **build.sh** | builds, installs and configures all of the above | `./build.sh` | `build.sh` |
 
-The `claude-codex-*` commands are links that `build.sh` installs in `/usr/local/bin`, next to the
-original command names, which still work. The tools' internal names (config folders such as
-`/etc/claudeinstall`, library and package names) are unchanged, so existing setups keep working.
-
-## How four projects became one
-
-1. **CCCU + claudebackup.** CCCU (Claudemods Container Creator Utility) was the first merge. To
-   make a live ISO of a container, it carried its own copy of the claudebackup-linux engine
-   (`src/remaster`), plus a variant of claudebackup's `build.sh` (`provision.sh`) and the
-   Calamares zips. It ran all of that inside the container.
-2. **claudebackup + claudeinstall-linux.** Next, claudebackup-linux and claudeinstall-linux were
-   merged into this compendium. ClaudeInstall replaced Calamares, the cloner got batch commands,
-   and the new Qt6 app **claudebackup-linux-qt6** was built on those commands.
-3. **Everything together: ClaudeInstall merged into CCCU.** CCCU joined as `cccu/`.
-   - **One engine.** Its private engine copy is gone. CCCU now builds its `cccu-iso-engine` from
-     the compendium's `cloner/src`. CCCU's container improvements went into that shared engine:
-     the `CBL_KERNEL` override (a container uses the host's kernel, so `uname -r` would name the
-     wrong one), the progress bar for the ISO stage, and the `[ INFO ] ISO engine n/N` progress
-     lines.
-   - **ClaudeInstall inside CCCU.** CCCU's `provision.sh` and Calamares zips are replaced by a
-     provisioning bundle (`compendium-provision.tar.gz`, made at build time). It holds the
-     compendium's `build.sh` and the ClaudeInstall sources. `cccu iso` unpacks the bundle in the
-     container, builds ClaudeInstall there (`build.sh --container-installer`), sets it up to
-     install the clone and adds the *Install* Desktop shortcut. CCCU's menu, window and
-     `--no-installer` / `--installer-btrfs` options now refer to ClaudeInstall. See
-     [ClaudeInstall in CCCU](cccu/README.md#claudeinstall-in-cccu).
-
-That makes four projects in one folder: **claudebackup-linux**, **claudebackup-linux-qt6**,
-**claudeinstall-linux** (ClaudeInstall) and **CCCU**. They share one engine, one installer and
-one build script:
-
-| | ISO engine | Installer on the ISO |
-|---|---|---|
-| `claudebackup-linux` / `claudebackup-linux-qt6` (host) | `cloner/src` | ClaudeInstall, built on the host by `build.sh` |
-| CCCU `cccu iso` (inside a container) | `cloner/src` (as `cccu-iso-engine`) | ClaudeInstall, built in the container by `build.sh --container-installer` |
-| Alpine (host only) | `cloner/src` | the cloner's own *Install Cloned System To Disk* |
-
-The ISO is a **full clone**. Your users, passwords, settings and `/home` go into it exactly as
-they are, and no live account is added. When ClaudeInstall installs the ISO it unpacks that same
-image, so the installed system has your accounts too (there is no users page).
-
-## Supported distributions (per tool)
-
-Each tool supports a different set of distributions. `build.sh` detects yours from `ID` and
-`ID_LIKE` in `/etc/os-release`. It builds only the tools that support it and says which ones it
-skips.
-
-| Distribution family | claudebackup-linux (cloner) | claudebackup-linux-qt6 (app) | ClaudeInstall (installer on the ISO) | CCCU (containers) |
-|---|:---:|:---:|:---:|:---:|
-| **Arch** | ✅ | ✅ | ✅ | ✅ |
-| **Debian / Ubuntu** | ✅ | ✅ | ✅ | ✅ |
-| **Fedora** | ✅ | ✅ | ✅ | ✅ |
-| **openSUSE** | ✅ | ✅ | ✅ | ✅ |
-| **Gentoo** | ✅ (squashfs only) | ✅ | ✅ | ❌ |
-| **Alpine** | ✅ (squashfs only) | ✅ | ❌, the cloner's own installer is used | ❌ |
-| **Void** | ❌ | ❌ | ClaudeInstall knows Void, but the compendium's build.sh and the cloner do not support it | ❌ |
-
-Which distributions each family includes:
-
-| Tool | Distributions it recognises |
-|---|---|
-| **claudebackup-linux** and **claudebackup-linux-qt6** (the app runs the cloner, so it supports the same distros) | **Arch:** Arch, CachyOS, EndeavourOS, Garuda, Archcraft, RebornOS · **Debian:** Debian, Ubuntu, KDE neon, Linux Mint, Pop!_OS, Kali, Devuan, openKylin · **Fedora:** Fedora, Nobara, RHEL · **openSUSE:** Tumbleweed, Slowroll, Leap · **Gentoo:** Gentoo, Calculate, Funtoo, Pentoo · **Alpine** |
-| **ClaudeInstall** | the families above (except Alpine) when it installs a clone. Its own build script also knows Manjaro, KaOS, Raspberry Pi OS, CentOS, Rocky, AlmaLinux, SLES, postmarketOS and Void |
-| **CCCU** | **Arch:** Arch, CachyOS, EndeavourOS, Garuda, ArcoLinux, Manjaro · **Debian:** Debian, Ubuntu, Kubuntu, KDE neon, Linux Mint, Pop!_OS, MX Linux (systemd boot only) · **Fedora:** Fedora, CentOS, AlmaLinux, Rocky Linux, RHEL, Nobara · **openSUSE:** Leap, Tumbleweed |
-
-Limits for each tool:
-
-- **claudebackup-linux / Qt6 app:** erofs images work on Arch, Debian, Fedora and openSUSE
-  (they need `mkfs.erofs` and kernel support). Gentoo and Alpine build squashfs only. Gentoo
-  kernels need `CONFIG_SQUASHFS`, `CONFIG_OVERLAY_FS`, `CONFIG_ISO9660_FS` and
-  `CONFIG_BLK_DEV_LOOP`. The Qt6 app needs Qt 6.2 or newer.
-- **ClaudeInstall:** so far it has only been built on the Arch family (CachyOS, Qt6). The other
-  families' build dependencies are untested. On Fedora it replaces Anaconda in the ISO. Alpine
-  ISOs use the cloner's *Install Cloned System To Disk* instead.
-- **CCCU:** needs systemd on the host and in the container, Incus, GCC 14+ (or Clang 17+) and
-  CMake 3.25+. NixOS, Gentoo, Slackware, Void, Devuan, Alpine, KDE Linux and Artix are not
-  supported (no systemd, or no installable package tree). Its *Create ISO* (and ClaudeInstall in
-  the container) covers the Arch, Debian, Fedora and openSUSE families. Arch is the main target;
-  the others are implemented but not tested on real machines yet.
-
-Testing status: all of the cloner's families are beta. ClaudeInstall in CCCU's container ISOs is
-new and untested. Test every ISO in a virtual machine (UEFI) first.
+The single commands still work, plus the `claude-codex-backup`, `claude-codex-install`,
+`claude-codex-install-tui` and `claude-codex-ccu` links. Internal names (`/etc/claudeinstall`,
+`~/.config/claudebackup-linux`, library and package names) are unchanged, so existing setups keep
+working.
 
 ## Quick start
 
 ```bash
-./build.sh
+git clone https://github.com/claudemods/claude-codex.git
 ```
 
-Run it as your normal user. It asks for the root password when it needs it (sudo, doas, run0,
-pkexec or su).
+```bash
+cd claude-codex && ./build.sh
+```
 
-**The questions** (press Enter for the default):
+1. Run `./build.sh` as **your normal user**. It asks a few questions (Enter = the default) and for
+   the root password when it needs it.
+2. It installs the packages, **builds everything** (the installer alone is about 1,000 files),
+   then **installs everything** — every step is shown live.
+3. The **Complete** screen lists each tool (*built + installed*, *FAILED* with its log, or
+   *skipped*) and how to start it. Nothing is started for you.
+
+Then open **Claude Codex Cloner** from the applications menu — or type `claude-codex`.
+
+Later, to update everything: the **Updates** tab, or
+
+```bash
+claude-codex update
+```
+
+---
+
+## Guide
+
+### Claude Codex Cloner — the window
+
+One window for the whole suite. Run it as your user: each task asks for the administrator
+password (polkit) when it needs it, and nothing runs before you press its button. The header shows
+whether CCU is installed and whether an update is available.
+
+| Tab | What is on it |
+|---|---|
+| **Backup** | *Overview* (what is ready, with fix buttons) · *Build ISO* · *Settings* · *Edit Configs* · *Write USB* · *Install* · *Maintenance* |
+| **Containers** | Claude Codex CCU: *Install to a drive* · *Set up on this system* · *Export* · *Create ISO* · *Manage containers* |
+| **Updates** | every tool with its state, the latest release on GitHub, *Update Everything* with live progress |
+| **Guide** | this guide, and the cloner's notes for your distro |
+
+Each feature lives in **one** place: USB sticks are written on *Backup > Write USB* (also the
+ISOs made on the Containers tab — *Open Write USB* takes you there), and updates happen on
+*Updates* only.
+
+### Build a live ISO
+
+**In the window — Backup tab:**
+
+1. **Overview** — fix anything marked red: a missing tool, the boot files, free space.
+2. **Settings** — ISO name, work / output / clone folders, squashfs or erofs, zstd level, a
+   copy-to-RAM boot entry, leaving package caches out. The terminal menu reads the same settings.
+3. **Edit Configs** (optional) — the ISO's GRUB menu, boot text and initramfs config, and
+   Claude Codex Install's configuration. Files open directly; *Save* writes them (installer files
+   as root, with a `.bak`), *Reset* goes back to the generated version.
+4. **Build ISO** — every step with live progress, a colour log, elapsed time and *Cancel* (it
+   stops the running program and removes every mount).
+5. The ISO is saved in the output folder (default `~/Downloads`).
+
+**In a terminal:** `claude-codex backup` opens the menu (*Create Bootable ISO*). For scripts,
+`claudebackup-linux --help-batch` lists the batch commands, e.g. `--status`, `--build-iso`,
+`--set level=5`, `--write-usb ISO DEVICE`.
+
+### Build the ISO from init (on the next boot)
+
+Like CCU's ISO build on reboot, Backup can build the ISO **at boot, before the login screen**.
+Nothing else is running then, so no file changes while the system is copied — a cleaner clone.
+
+| Where | How |
+|---|---|
+| Window | *Backup > Build ISO* > **Build On Next Boot** (the button then reads **Cancel Boot Build**) |
+| Terminal menu | **Create Bootable ISO On Next Boot (from init)** — select it again to cancel |
+| Command line | `sudo claudebackup-linux --build-on-boot` / `--cancel-boot-build` |
+
+On the next boot the one-shot `claude-codex-backup-boot.service` takes the console (VT1) and builds
+the ISO with your saved settings and live progress; the login screen waits for it. On success the
+PC reboots after a 5-second countdown; on failure the error stays 30 seconds, then the login screen
+starts (log: `/var/log/claudebackup-linux.log`). The service switches itself off *before* building
+and its files are left out of the image, so it runs exactly once. Needs systemd (not on Alpine or
+OpenRC Gentoo).
+
+### Write a USB stick
+
+*Backup > Write USB*: pick the ISO (the newest ones of the output folder are listed, *Browse...* for
+any other), pick the drive (removable drives first; the running system's disks are refused), type
+the device name to confirm. The whole drive is erased. Test a new ISO in a virtual machine (UEFI)
+before you rely on it.
+
+### Install the clone to a disk
+
+Boot the live ISO. Its desktop has **Install &lt;distro&gt;** (`claudebackup-install` in a
+terminal), which starts **Claude Codex Install** as root:
+
+1. Language and keyboard
+2. Partitions — erase a disk, or your own layout (ext4, btrfs zstd:22, xfs; optional LUKS). The
+   default file system is the one you chose in build.sh
+3. Summary, then install: the image is unpacked, then fstab, machine-id, the kernel fix-up,
+   initramfs and GRUB are done for the new disk
+4. Reboot — with the accounts of the cloned system
+
+With the **terminal** interface only, the shortcut opens `claudeinstall-tui` in a terminal.
+**Alpine** ISOs use the cloner's own *Install Cloned System To Disk* (*Backup > Install*).
+
+Other installer modes (build.sh): **new** — a normal distro installer with users and packages;
+**distro** — the claudemods distributions online (pacstrap + profile, Arch).
+
+### Containers (Claude Codex CCU)
+
+CCU runs your system as an Incus system container with its own btrfs storage. The **Display**
+setting decides how it reaches the screen:
+
+| Display | For | How |
+|---|---|---|
+| **Desktop session** | a PC with a GPU | the host's SDDM offers a *Container Plasma* session; it shows the container's desktop through the cage compositor, with the GPU |
+| **Native** | a PC with a GPU | the container's own login screen on the console |
+| **Server** | a machine without a usable GPU (rented server, BMC/iKVM screen) | Plasma Wayland in software, plus remote access: **KRDP** (RDP, port 3389) and **SSH** (host on 22, container on 2222) — the setup steps are printed when it finishes |
+
+| Containers tab | What it does |
+|---|---|
+| **Install to a drive** | wipes a drive (or uses two existing partitions next to another system): EFI partition, a small tty host with Incus, and your desktop container, created on the first boot with live progress |
+| **Set up on this system** | installs Incus, SDDM, cage and the rest with your package manager, then creates the container; reboot afterwards |
+| **Export** | writes this system as an image (`.tar.zst` ...) to clone on another machine |
+| **Create ISO** | a live ISO of a container's system, built *inside* the container on the next boot, with Claude Codex Install on it — then *Open Write USB* |
+| **Manage containers** | start, stop, *Switch to it* (the one the host session shows), *Duplicate* |
+
+Every field shows **SET** or **NOT SET**; *Start* is enabled once nothing required is missing, and
+*Dry run* prints what would happen. The passwords you type go to CCU through stdin, never the
+command line. Terminal: `claude-codex ccu` (the menu) or `sudo cccu --help`. All modes:
+[cccu/README.md](cccu/README.md).
+
+### Updates
+
+The window checks GitHub when it opens (the header shows the result). **Updates > Update
+Everything** downloads the latest release and runs its `build.sh` with **the answers of your last
+build**, so every tool is rebuilt and reinstalled together; a tool that does not compile keeps its
+old version. *Rebuild even when it is up to date* repairs an installation.
+
+```bash
+claude-codex update --check
+```
+
+```bash
+claude-codex update
+```
+
+```bash
+claude-codex update --force
+```
+
+Your answers are kept in `/etc/claude-codex/build.conf`; run `./build.sh` again to change them.
+The source the updater builds is kept in `/var/cache/claude-codex/source`. The cloner's own
+*Update* (menu) and `--update` run the same suite updater.
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `claude-codex` | a menu of everything |
+| `claude-codex cloner` | the window |
+| `claude-codex backup [args]` | the cloner: its menu, or batch commands (`--help-batch`) |
+| `claude-codex ccu [args]` | Claude Codex CCU, as root |
+| `claude-codex install [--tui]` | Claude Codex Install, as root |
+| `claude-codex status` | what is installed, the build choices, the source |
+| `claude-codex update [--check] [--force] [--branch NAME]` | update everything |
+| `claude-codex help` / `version` | |
+
+---
+
+## build.sh in detail
+
+**The questions** (Enter = the default):
 
 | Question | Choices |
 |---|---|
 | Image type of the ISO | squashfs (default) / erofs |
-| Build ClaudeInstall? | yes (default) / no |
-| What ClaudeInstall installs | **the cloned system** (default; the live ISOs built here install themselves) / **a new system** (users, packages) / **claudemods distributions online** (pacstrap + profile, Arch only) |
-| ClaudeInstall's interface | **GUI** (Qt6 window, default) / **TUI** (terminal, `claudeinstall-tui`) / **both** |
-| Installed system's default filesystem (clone mode only) | ext4 (default) / btrfs zstd:22 |
-| Build the Qt6 app? | yes (default) / no |
-| Build CCCU? | yes (default) / no; asked on Arch, Debian, Fedora and openSUSE only |
+| Build Claude Codex Install? | yes (default) / no |
+| What it installs | **the cloned system** (default) / **a new system** (users, packages) / **claudemods distributions online** (Arch only) |
+| Its interface | **GUI** (default) / **TUI** (`claudeinstall-tui`) / **both** |
+| Default filesystem of the installed system (clone mode) | ext4 (default) / btrfs zstd:22 |
+| Build Claude Codex Cloner (the window)? | yes (default) / no |
+| Build Claude Codex CCU? | yes (default) / no — Arch, Debian, Fedora and openSUSE only |
 
-**What it does then**, in this order:
+**What it does then:**
 
-1. **Packages** (as root): the build and ISO tools for your distro, plus the build dependencies of
-   each tool you picked
-2. **Build**, as you, all of it before anything is installed. Each step has a banner, and all
-   compiler output is shown live:
-   1. Claude Codex Backup, the cloner (`claudebackup-linux`)
-   2. Claude Codex Backup, the Qt6 app (`claudebackup-linux-qt6`)
-   3. Claude Codex Install (about 1,000 files), in the mode and interface you picked. Its
-      configure and compile output is also kept in `installer/build/`
-   4. Claude Codex CCU (`cccu` + `cccu-gui`, needs GCC 14+)
-3. **Install** (as root, one step): everything that compiled, with each install step shown.
-   - Clone mode sets up `/etc/claudeinstall` to install the clone from the live ISO. On Arch it
-     uses your claudemods preset via `claudeconfig`.
-   - Distro mode puts the profiles, images and `needed-files` (zips, scripts) in
-     `/usr/share/claudeinstall/`, where the profiles look for them.
-   - The `claude-codex-*` commands are added.
-4. **Desktop shortcut** (clone mode): **Install &lt;distro&gt;**. It is part of the clone, so the
-   live ISO's desktop has it too, and it opens in a terminal if you picked the TUI only.
-5. **Complete**: a table of each tool (*built + installed*, *FAILED* with the log to open, or
-   *skipped*) and how to start it. **Nothing is started.** If a tool you picked failed,
-   `build.sh` exits with an error.
+1. **Packages** (root) — the build and ISO tools for your distro, plus every dependency of each
+   tool you picked (Qt 6, KPMcore, KF6, yaml-cpp, polkit-qt6, GRUB, efibootmgr, the file-system
+   tools, ckbcomp on Arch ...)
+2. **Build** (as you), all of it before anything is installed, each part with a banner:
+   `BUILD 1/4` the cloner · `BUILD 2/4` the window · `BUILD 3/4` Claude Codex Install (about 1,000
+   files; every error in `installer/build/errors.log`) · `BUILD 4/4` Claude Codex CCU (GCC 14+)
+3. **Install** (root, one step) — everything that compiled. Clone mode configures
+   `/etc/claudeinstall` to install the clone (on Arch with the claudemods preset via
+   `claudeconfig`); distro mode puts the profiles, images and `needed-files` in
+   `/usr/share/claudeinstall/`. Then `claude-codex`, its polkit rule, and your answers in
+   `/etc/claude-codex/build.conf`
+4. **Desktop shortcut** (clone mode) — *Install &lt;distro&gt;*; it is part of the clone, so the
+   live ISO's desktop has it too
+5. **Complete** — the table of results and how to start each tool. Nothing is started; if a tool
+   you picked failed, build.sh exits with an error
 
-Options skip the questions: `--erofs`, `--btrfs` / `--ext4`, `--no-installer`,
+**Options** skip the questions: `--yes`, `--erofs`, `--btrfs` / `--ext4`, `--no-installer`,
 `--installer-mode=clone|new|distro`, `--installer-ui=gui|tui|both`, `--no-gui`, `--no-cccu`.
-`--yes` answers every question with its default. Run `./build.sh help` to list them.
+`./build.sh help` lists them.
 
-### One build script
-
-There is **one** build script: `./build.sh` at the top. It builds all four tools, with no
-separate build script per project. The four old build scripts are merged into it:
+There is **one** build script. The old ones are merged into it:
 
 | Old script | Now in `build.sh` |
 |---|---|
 | claudebackup-linux `dev-release/build.sh` | host tools, bootloaders, the cloner, the Alpine installer tools |
 | claudeinstall-linux `build.sh` | `install_claudeinstall_deps`, `build_claudeinstall`, `install_claudeinstall` |
 | CCCU `build.sh` | `install_cccu_deps`, `cccu_compiler`, `build_cccu`, `install_cccu` |
-| CCCU `src/remaster/provision.sh` | `--root-phase` and `--container-installer`, which CCCU runs inside containers |
+| CCCU `src/remaster/provision.sh` | `--root-phase` and `--container-installer`, which CCU runs inside containers |
 
-CCCU carries this same `build.sh` into its containers (in its provisioning bundle), so the host
-and the containers run identical steps.
+CCU carries this same `build.sh` into its containers (its provisioning bundle), so the host and the
+containers run identical steps.
 
-The only other scripts in the folder are not build scripts:
+## Supported distributions
 
-| Script | What it is |
+`build.sh` detects your distro from `ID` / `ID_LIKE` in `/etc/os-release`, builds only the tools
+that support it, and says which it skips.
+
+| Family | Backup (cloner) | Cloner window | Install (on the ISO) | CCU (containers) |
+|---|:---:|:---:|:---:|:---:|
+| **Arch** | ✅ | ✅ | ✅ | ✅ |
+| **Debian / Ubuntu** | ✅ | ✅ | ✅ | ✅ |
+| **Fedora** | ✅ | ✅ | ✅ | ✅ |
+| **openSUSE** | ✅ | ✅ | ✅ | ✅ |
+| **Gentoo** | ✅ (squashfs) | ✅ (Backup tab) | ✅ | ❌ |
+| **Alpine** | ✅ (squashfs) | ✅ (Backup tab) | ❌ — the cloner's own installer | ❌ |
+| **Void** | ❌ | ❌ | known to the installer, not to build.sh or the cloner | ❌ |
+
+| Tool | Distributions it recognises |
 |---|---|
-| `installer/claudeconfig`, `claudeinstall-colors`, `claudeinstall-pkgfix` | commands that ClaudeInstall installs on the system (to change its settings and colours) |
-| `installer/needed-files/**/*.sh` | tweak scripts that ClaudeInstall's claudemods-distro mode copies onto installed systems |
+| **Backup** and the window | **Arch:** Arch, CachyOS, EndeavourOS, Garuda, Archcraft, RebornOS · **Debian:** Debian, Ubuntu, KDE neon, Linux Mint, Pop!_OS, Kali, Devuan, openKylin · **Fedora:** Fedora, Nobara, RHEL · **openSUSE:** Tumbleweed, Slowroll, Leap · **Gentoo:** Gentoo, Calculate, Funtoo, Pentoo · **Alpine** |
+| **Install** | the families above (except Alpine) when it installs a clone; its own configuration also knows Manjaro, KaOS, Raspberry Pi OS, CentOS, Rocky, AlmaLinux, SLES, postmarketOS and Void |
+| **CCU** | **Arch:** Arch, CachyOS, EndeavourOS, Garuda, ArcoLinux, Manjaro · **Debian:** Debian, Ubuntu, Kubuntu, KDE neon, Linux Mint, Pop!_OS, MX Linux (systemd boot) · **Fedora:** Fedora, CentOS, AlmaLinux, Rocky Linux, RHEL, Nobara · **openSUSE:** Leap, Tumbleweed |
 
-Removed while merging: those four build scripts, ClaudeInstall's setup helper app
-(`installer/helper/`, which only wrote settings for its old build script), and ClaudeInstall's
-`ci/` folder (Calamares build-test scripts that nothing used).
+Limits:
 
-## CCCU (containers)
+- **Backup:** erofs needs `mkfs.erofs` and kernel support (Arch, Debian, Fedora, openSUSE). Gentoo
+  and Alpine build squashfs only; Gentoo kernels need `CONFIG_SQUASHFS`, `CONFIG_OVERLAY_FS`,
+  `CONFIG_ISO9660_FS` and `CONFIG_BLK_DEV_LOOP`.
+- **Install:** built and tested on the Arch family (CachyOS, Qt 6) so far; the other families'
+  build dependencies are untested. On Fedora it replaces Anaconda in the ISO.
+- **CCU:** systemd on the host and in the container, Incus, GCC 14+ (or Clang 17+), CMake 3.25+.
+  Not on NixOS, Gentoo, Slackware, Void, Devuan, Alpine, KDE Linux or Artix. Arch is the main
+  target; the other families are implemented but not yet tested on real machines.
 
-`sudo cccu` (terminal) or **CCCU** in the applications menu (`cccu-gui`). The Qt6 app's Overview
-page also has an **Open** button for it. CCCU clones the system into an Incus system container
-with its own btrfs storage and boots into its KDE Plasma desktop on a minimal tty host. Its
-**Create ISO** mode runs the compendium's cloner engine inside the container. With the installer
-switched on, the first run builds ClaudeInstall inside the container
-(`build.sh --container-installer`), so the ISO has an *Install* shortcut, the same as an ISO made
-with `claudebackup-linux`. If ClaudeInstall does not build there, the ISO is still made, just
-without an installer. See [cccu/README.md](cccu/README.md) for all modes.
-
-## Using it
-
-**Qt6 app** (`claude-codex-backup-gui` / `claudebackup-linux-qt6`, listed as *Claude Codex Backup* in the applications menu).
-Run it as your user. It asks for the administrator password through polkit when a task needs it.
-
-- **Overview**: shows what is ready on this system (tools, boot files, ClaudeInstall, free
-  space), with fix buttons, and quick actions
-- **Build ISO**: the build steps with live progress, a colour log, elapsed time and Cancel.
-  Cancel stops the running program and removes every mount. **Build On Next Boot** sets the
-  build up to run from init instead (see below).
-- **Settings**: ISO name, work, output and clone directories, image type, zstd level, RAM-mode
-  boot entry, package-cache cleaning. The terminal menu uses the same settings file.
-- **Edit Configs**: your own copies of GRUB, boot text and initramfs files, and ClaudeInstall's
-  configuration files. Installer files are saved as root and keep a `.bak`.
-- **Write USB**: writes an ISO to a drive with progress. The running system's disks can't be
-  selected.
-- **Install**: in the live ISO, launches ClaudeInstall. On Alpine it runs the cloner's own
-  installer instead.
-- **Guide** and **Maintenance**: the guide for your distro, updates, the Arch mkinitcpio config,
-  and the log
-
-**Terminal menu**: `claudebackup-linux` works the same as before. *Launch Calamares* is now
-*Launch Claude Codex Install*.
-
-### Build the ISO from init (on the next boot)
-
-Like Claude Codex CCU's ISO build on reboot, Claude Codex Backup can build the ISO **at boot,
-before the login screen**. No desktop or apps are running then, so no files change while the
-system is copied, which gives a cleaner clone.
-
-| Where | How |
-|---|---|
-| Qt6 app | Build ISO page > **Build On Next Boot**. The same button then reads **Cancel Boot Build** |
-| Terminal menu | **Create Bootable ISO On Next Boot (from init)**. Select it again to cancel |
-| Command line | `sudo claude-codex-backup --build-on-boot` / `--cancel-boot-build` |
-
-On the next boot the one-shot service `claude-codex-backup-boot.service` takes the console
-(VT1) and builds the ISO with your saved settings, showing the progress live. The login screen
-waits for it.
-- **Success:** the PC reboots after a 5-second countdown.
-- **Failure:** the error stays on screen for 30 seconds, then the login screen starts. The log is
-  `/var/log/claudebackup-linux.log`.
-
-The service switches itself off *before* the build starts, and its files are left out of the
-image. So it runs exactly once, and neither the ISO nor systems installed from it ever build
-again by themselves. This needs systemd, so it isn't offered on Alpine or OpenRC Gentoo.
-
-**Batch commands**, for scripts and for the app: run `claudebackup-linux --help-batch` to list
-them. Examples: `--status`, `--build-iso`, `--write-usb ISO DEVICE`, `--set level=5`.
+Status: beta. Test every ISO and the installer in a virtual machine (UEFI) first — installing
+erases the target disk.
 
 ## How the pieces fit
 
 ```
-running system ──claudebackup-linux──▶ live ISO (squashfs/erofs image + ClaudeInstall + shortcut)
+running system ──claudebackup-linux──▶ live ISO (squashfs/erofs image + Claude Codex Install + shortcut)
                                             │
                        live session: "Install <distro>" → claudebackup-install
                                             │  (pkexec, matches unpackfs to the real image type)
                                             ▼
-                         ClaudeInstall: partition → unpack image → fstab, machine-id
-                                        → kernel fix-up → initramfs → GRUB → reboot
+                   Claude Codex Install: partition → unpack image → fstab, machine-id
+                                         → kernel fix-up → initramfs → GRUB → reboot
 ```
 
-| Family | Image that ClaudeInstall unpacks | Initramfs step | GRUB |
+| | ISO engine | Installer on the ISO |
+|---|---|---|
+| Backup (host) | `cloner/src` | Claude Codex Install, built on the host by `build.sh` |
+| CCU *Create ISO* (inside a container) | `cloner/src` (as `cccu-iso-engine`) | Claude Codex Install, built in the container by `build.sh --container-installer` |
+| Alpine (host only) | `cloner/src` | the cloner's own *Install Cloned System To Disk* |
+
+| Family | Image the installer unpacks | Initramfs step | GRUB |
 |---|---|---|---|
-| Arch | `/run/arch/bootmnt/LiveOS/rootfs.img` | `initcpiocfg` + `initcpio` (running kernel's preset) | `grub` |
+| Arch | `/run/arch/bootmnt/LiveOS/rootfs.img` | `initcpiocfg` + `initcpio` (the running kernel's preset) | `grub` |
 | Debian / Ubuntu | `/run/live/medium/live/filesystem.squashfs` | `initramfs` | `grub` |
 | Fedora | `/run/initramfs/live/LiveOS/squashfs.img` | `dracut` + boot-entry fix-up | `grub2` |
 | openSUSE | `/run/initramfs/live/LiveOS/squashfs.img` | `dracut` | `grub2` |
 | Gentoo | `/run/initramfs/live/LiveOS/squashfs.img` | `dracut` | `grub` |
-| Alpine | the cloner's own installer (*Install Cloned System To Disk*) | `mkinitfs` | `grub` |
+| Alpine | the cloner's own installer | `mkinitfs` | `grub` |
 
-`build.sh --configure-installer` (run as root) writes the generated files:
-`/etc/claudeinstall/settings.conf`, `modules/*.conf` and `scripts/cbl-kernel.sh`. The launcher
-is `/usr/local/bin/claudebackup-install`. If an earlier ClaudeInstall configuration exists, it is
-kept in `/etc/claudeinstall.orig`.
+The window runs as your user. Its root tasks go through pkexec with polkit rules that keep the
+password for a few minutes: `org.claudemods.claudebackup` (the cloner) and
+`org.claudemods.claude-codex` (`/usr/local/bin/cccu` and `/usr/local/bin/claude-codex`).
 
-## What changed from the two old projects
+## How four projects became one
 
-- Calamares is gone. The Calamares zips are no longer shipped, and nothing installs or launches
-  Calamares. The old `claudebackup-calamares` launcher and its Desktop shortcut are replaced
-  when you run `build.sh`.
-- The cloner reports ClaudeInstall in its status, its guide and *Edit Configs*. On Fedora,
-  Anaconda's launchers are left out of the image when ClaudeInstall is installed.
-- The cloner has new batch commands that the Qt6 app runs, plus `@@step` progress markers for
-  the app.
-- `--write-usb` refuses any drive that holds the running system.
-- ClaudeInstall source fixes (both were broken in the original `claudeinstall-linux-main` as well):
-  - The partition module was split across `src/modules/`: `jobs/`, `PartitionViewStep`,
-    `PartitionTuiStep` and `partition.schema.yaml` were loose there, next to older copies of
-    `Config.cpp`/`.h` and `partition.conf`. They are now back in `src/modules/partition/`. The
-    newer copies were kept, and the old loose duplicates and the duplicate `tests/` folder were
-    removed.
-  - `src/libclaudeinstallui/CMakeLists.txt` pointed at `utils/ErrorDialog/ErrorDialog.ui`, which
-    does not exist. It now points at `widgets/ErrorDialog.ui`, where the file and its `.cpp` are.
-- CCCU no longer ships an engine copy, `provision.sh` or Calamares zips. Its `cccu-iso-engine`
-  is built from `cloner/src`, and its in-container provisioning uses the compendium's
-  `build.sh` (`--root-phase`, then `--container-installer`).
-- The cloner's update check and self-update now point at a `claude-codex` repository.
-  Change `REPO_URL` and the other update URLs in `cloner/src/common.h` if you publish it
-  somewhere else.
+1. **CCCU + claudebackup.** CCCU (Claudemods Container Creator Utility) was the first merge: to
+   make a live ISO of a container it carried its own copy of the claudebackup-linux engine, a
+   variant of its `build.sh` (`provision.sh`) and the Calamares zips.
+2. **claudebackup + claudeinstall-linux.** Then claudebackup-linux and claudeinstall-linux were
+   merged into this compendium: ClaudeInstall replaced Calamares, the cloner got batch commands,
+   and a Qt6 app was built on them.
+3. **Everything together.** CCCU joined as `cccu/`: its engine copy is gone (`cccu-iso-engine` is
+   built from `cloner/src`, which got CCU's container improvements), and its provisioning bundle
+   carries the compendium's `build.sh` and the installer sources, so `cccu iso` builds Claude Codex
+   Install inside the container. See [Claude Codex Install in CCU](cccu/README.md#claudeinstall-in-cccu).
+4. **One window, one command, one updater.** The Backup app and the CCU window became one
+   **Claude Codex Cloner** with tabs (nothing duplicated: one USB writer, one updater, one guide),
+   the terminal tools got one front door (`claude-codex`), and `claude-codex update` updates the
+   whole suite with your saved answers.
+
+## Troubleshooting and logs
+
+| What | Where |
+|---|---|
+| The cloner (ISO builds, USB writes) | `/var/log/claudebackup-linux.log` |
+| The installer launcher on the live ISO | `/tmp/claudebackup-install-<uid>.log` |
+| Claude Codex Install build errors | `installer/build/errors.log` (also `configure.log`, `build.log`) |
+| CCU | `/var/log/cccu/` (`install.log`, `container.log`, `export.log`, `iso.log`) |
+| A boot-time ISO build | `journalctl -b -u claude-codex-backup-boot` |
+| A CCU desktop session that does not start | `journalctl -b -u sddm`, `~/.local/share/sddm/wayland-session.log`, `incus info <container> --show-log` |
+
+- **A tool shows FAILED on the Complete screen** — open the log it names, install what it reports
+  missing, run `./build.sh` again.
+- **"Not authorised"** — the password dialog was cancelled; polkit (`pkexec`) and a polkit agent
+  must be installed.
+- **Containers tab: "cannot list the containers"** — your user is not in `incus-admin`; press
+  *Refresh* (it asks for the password).
+- **Something looks old after an update** — restart Claude Codex Cloner; `claude-codex status`
+  shows what is installed.
 
 ## Requirements
 
-Linux; Qt 6.2 or newer for the app; ClaudeInstall's own dependencies, which
-the compendium's `build.sh` installs. Test the ISO and the installer in a virtual machine (UEFI)
-first: installing erases the target disk.
-
-Logs: `/var/log/claudebackup-linux.log` (cloner), `/tmp/claudebackup-install-<uid>.log`
-(installer launcher), and ClaudeInstall's session log.
+Linux with systemd for the boot-time build and CCU; Qt 6.2+ for the window; polkit for the
+password prompts. `build.sh` installs everything else. CCU additionally needs GCC 14+ / Clang 17+,
+CMake 3.25+ and Incus (which CCU installs itself).
 
 ---
 

@@ -1,8 +1,18 @@
+// SPDX-FileCopyrightText: claudemods
+// SPDX-License-Identifier: MIT
+//
+// Claude Codex Cloner - the Containers tab: Claude Codex CCU (the Container Creator Utility).
+// It does not duplicate the tool: it collects the settings, runs the `cccu` command line tool with them
+// (unattended) and shows its progress and log live. The window runs as your user; each task asks for the
+// administrator password through pkexec (passwords for the new users go through stdin, never the command
+// line). Writing an ISO to USB is done on the Backup tab (Write USB), so it is not repeated here.
+
 #pragma once
+
 #include <QByteArray>
 #include <QList>
-#include <QMainWindow>
 #include <QProcess>
+#include <QWidget>
 
 #include <array>
 #include <functional>
@@ -20,13 +30,18 @@ class QSpinBox;
 class QTabWidget;
 class QTableWidget;
 
-// CCCU as a desktop application. It does not duplicate the tool: it collects the settings, runs the `cccu`
-// command line tool with them (unattended) and shows its progress and log live. Everything fits on one
-// screen: tabs on top, the settings of the tab in the middle, progress, log and buttons at the bottom.
-class MainWindow : public QMainWindow {
+class CcuView : public QWidget {
     Q_OBJECT
 public:
-    MainWindow();
+    explicit CcuView(QWidget* parent = nullptr);
+
+    static QString cccuPath();     // $CLAUDE_CODEX_CCU, cccu on PATH, or /usr/local/bin/cccu
+    static bool available();       // cccu is installed
+    bool isBusy() const { return running_; }
+    bool confirmClose();           // the window is closing: false keeps it open
+
+Q_SIGNALS:
+    void writeUsbRequested(const QString& iso);   // open Backup > Write USB (with this ISO, when known)
 
 private:
     enum Mode { Install = 0, Running = 1, Export = 2, Iso = 3, Containers = 4 };
@@ -57,14 +72,16 @@ private:
     QWidget* buildPage(Mode mode);
     QWidget* buildIsoPage();
     QWidget* buildContainersPage();
-    QWidget* card(const QString& title, const QString& text, QWidget** formHost, Mode mode);
+    QWidget* card(const QString& title, const QString& text, Mode mode);
     void buildCommon(Mode mode);
     QWidget* addRow(Mode mode, const QString& label, QWidget* shown, const QList<QWidget*>& watched, bool required,
                     std::function<bool()> isSet, bool wide = false);
     QWidget* fileRow(QLineEdit* edit, bool save, const QString& filter, bool folder = false);
     void refreshDrives(QComboBox* box);
     void refreshPartitions(QComboBox* box);
-    void refreshContainers();
+    void refreshContainers(bool askPassword);
+    void listContainers(bool elevated, bool askPassword);
+    void fillContainers(const QString& plainOutput);
     int missing(Mode mode) const;
     void refreshStatus();
     QStringList buildArgs(Mode mode) const;
@@ -73,12 +90,12 @@ private:
     void start();
     void runCli(const QStringList& args, Mode mode, const QString& title);
     void cancel();
+    void stopTool();
     void readOutput();
     void handleLine(const QString& line);
     void finished(int code, QProcess::ExitStatus status);
     void setRunning(bool running);
     void appendLog(const QString& text, const QString& color, bool bold = false);
-    QString backendPath() const;
     Mode currentMode() const;
 
     QTabWidget* tabs_ = nullptr;
@@ -113,15 +130,13 @@ private:
     QComboBox* isoInstaller_ = nullptr;
     QCheckBox* isoRam_ = nullptr;
     QCheckBox* isoCache_ = nullptr;
-    QLineEdit* usbIso_ = nullptr;
-    QComboBox* usbDrive_ = nullptr;
     // Containers
     QTableWidget* table_ = nullptr;
     QLineEdit* copyName_ = nullptr;
     QCheckBox* copySwitch_ = nullptr;
     QLabel* containerHint_ = nullptr;
+    QProcess* lister_ = nullptr;        // the container list being read (async)
 
-    QLabel* rootWarning_ = nullptr;
     QLabel* summary_ = nullptr;
     QLabel* stepLabel_ = nullptr;
     QLabel* result_ = nullptr;
@@ -133,6 +148,7 @@ private:
 
     QProcess* process_ = nullptr;
     QByteArray pending_;     // output not yet ended by a newline
+    QByteArray secrets_;     // passwords for --secrets-stdin, written once the tool runs
     bool running_ = false;
     int currentStep_ = 1;
     QString stepBase_;       // "Step 3 of 12  -  Title": the detail (bytes, speed, ETA) is appended to it
