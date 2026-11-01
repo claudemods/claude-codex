@@ -50,6 +50,48 @@ The ISO is a **full clone**. Your users, passwords, settings and `/home` go into
 they are, and no live account is added. When ClaudeInstall installs the ISO it unpacks that same
 image, so the installed system has your accounts too (there is no users page).
 
+## Supported distributions (per tool)
+
+Each tool supports a different set of distributions. `build.sh` detects yours from `ID` and
+`ID_LIKE` in `/etc/os-release`. It builds only the tools that support it and says which ones it
+skips.
+
+| Distribution family | claudebackup-linux (cloner) | claudebackup-linux-qt6 (app) | ClaudeInstall (installer on the ISO) | CCCU (containers) |
+|---|:---:|:---:|:---:|:---:|
+| **Arch** | ✅ | ✅ | ✅ | ✅ |
+| **Debian / Ubuntu** | ✅ | ✅ | ✅ | ✅ |
+| **Fedora** | ✅ | ✅ | ✅ | ✅ |
+| **openSUSE** | ✅ | ✅ | ✅ | ✅ |
+| **Gentoo** | ✅ (squashfs only) | ✅ | ✅ | ❌ |
+| **Alpine** | ✅ (squashfs only) | ✅ | ❌, the cloner's own installer is used | ❌ |
+| **Void** | ❌ | ❌ | builds (its own `installer/build.sh`), but the cloner has no Void support | ❌ |
+
+Which distributions each family includes:
+
+| Tool | Distributions it recognises |
+|---|---|
+| **claudebackup-linux** and **claudebackup-linux-qt6** (the app runs the cloner, so it supports the same distros) | **Arch:** Arch, CachyOS, EndeavourOS, Garuda, Archcraft, RebornOS · **Debian:** Debian, Ubuntu, KDE neon, Linux Mint, Pop!_OS, Kali, Devuan, openKylin · **Fedora:** Fedora, Nobara, RHEL · **openSUSE:** Tumbleweed, Slowroll, Leap · **Gentoo:** Gentoo, Calculate, Funtoo, Pentoo · **Alpine** |
+| **ClaudeInstall** | the families above (except Alpine) when it installs a clone. Its own build script also knows Manjaro, KaOS, Raspberry Pi OS, CentOS, Rocky, AlmaLinux, SLES, postmarketOS and Void |
+| **CCCU** | **Arch:** Arch, CachyOS, EndeavourOS, Garuda, ArcoLinux, Manjaro · **Debian:** Debian, Ubuntu, Kubuntu, KDE neon, Linux Mint, Pop!_OS, MX Linux (systemd boot only) · **Fedora:** Fedora, CentOS, AlmaLinux, Rocky Linux, RHEL, Nobara · **openSUSE:** Leap, Tumbleweed |
+
+Limits for each tool:
+
+- **claudebackup-linux / Qt6 app:** erofs images work on Arch, Debian, Fedora and openSUSE
+  (they need `mkfs.erofs` and kernel support). Gentoo and Alpine build squashfs only. Gentoo
+  kernels need `CONFIG_SQUASHFS`, `CONFIG_OVERLAY_FS`, `CONFIG_ISO9660_FS` and
+  `CONFIG_BLK_DEV_LOOP`. The Qt6 app needs Qt 6.2 or newer.
+- **ClaudeInstall:** so far it has only been built on the Arch family (CachyOS, Qt6). The other
+  families' build dependencies are untested. On Fedora it replaces Anaconda in the ISO. Alpine
+  ISOs use the cloner's *Install Cloned System To Disk* instead.
+- **CCCU:** needs systemd on the host and in the container, Incus, GCC 14+ (or Clang 17+) and
+  CMake 3.25+. NixOS, Gentoo, Slackware, Void, Devuan, Alpine, KDE Linux and Artix are not
+  supported (no systemd, or no installable package tree). Its *Create ISO* (and ClaudeInstall in
+  the container) covers the Arch, Debian, Fedora and openSUSE families. Arch is the main target;
+  the others are implemented but not tested on real machines yet.
+
+Testing status: all of the cloner's families are beta. ClaudeInstall in CCCU's container ISOs is
+new and untested. Test every ISO in a virtual machine (UEFI) first.
+
 ## Quick start
 
 ```bash
