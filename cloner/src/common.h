@@ -28,11 +28,11 @@ const std::string APP_RELEASE = CODEX_RELEASE;
 const std::string APP_BIN     = "claudebackup-linux";
 
 // Filesystem label of the live medium (referenced by boot params, menus and xorriso)
-const std::string LIVE_LABEL = "CBL_LIVE";
+const std::string LIVE_LABEL = "CCB_LIVE";
 
 // Paths
 const std::string CONFIG_DIR  = "/etc/claudebackup-linux";
-const std::string STAGING_DIR = "/tmp/cbl";
+const std::string STAGING_DIR = "/tmp/ccb";
 const std::string DEFAULT_WORK_DIR = "/home/claudebackup";
 const std::string LOG_FILE    = "/var/log/claudebackup-linux.log";
 // BIOS/UEFI boot files, downloaded by the compendium's build.sh (the app never downloads anything)
@@ -79,12 +79,12 @@ inline void logToFile(const std::string& tag, const std::string& msg) {
     if (f.is_open()) f << "[" << tag << "] " << msg << "\n";
 }
 
-// Steps ("[cbl] Mounting system to ...") are light green, the commands' output is dark green; warnings
+// Steps ("[ccb] Mounting system to ...") are light green, the commands' output is dark green; warnings
 // and errors keep their own colour so they stand out
-inline void logNormal(const std::string& msg)  { std::cout << COLOR_GREEN  << "[cbl] " << msg << COLOR_RESET << std::endl; logToFile("INFO", msg); }
-inline void logSuccess(const std::string& msg) { std::cout << COLOR_GREEN  << "[cbl] " << msg << COLOR_RESET << std::endl; logToFile("OK", msg); }
-inline void logWarning(const std::string& msg) { std::cout << COLOR_YELLOW << "[cbl] " << COLOR_RESET << msg << std::endl; logToFile("WARN", msg); }
-inline void logError(const std::string& msg)   { std::cerr << COLOR_RED    << "[cbl] " << COLOR_RESET << msg << std::endl; logToFile("ERROR", msg); }
+inline void logNormal(const std::string& msg)  { std::cout << COLOR_GREEN  << "[ccb] " << msg << COLOR_RESET << std::endl; logToFile("INFO", msg); }
+inline void logSuccess(const std::string& msg) { std::cout << COLOR_GREEN  << "[ccb] " << msg << COLOR_RESET << std::endl; logToFile("OK", msg); }
+inline void logWarning(const std::string& msg) { std::cout << COLOR_YELLOW << "[ccb] " << COLOR_RESET << msg << std::endl; logToFile("WARN", msg); }
+inline void logError(const std::string& msg)   { std::cerr << COLOR_RED    << "[ccb] " << COLOR_RESET << msg << std::endl; logToFile("ERROR", msg); }
 [[noreturn]] inline void fatal(const std::string& msg) { logError(msg); std::exit(1); }
 
 // ---------------------------------------------------------------------------

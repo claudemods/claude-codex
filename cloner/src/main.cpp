@@ -10,7 +10,7 @@
 #include "cli.h"
 
 // Passed to the re-launched root process so it knows who started it, whichever tool was used
-const std::string USER_ARG = "--cbl-user=";
+const std::string USER_ARG = "--ccb-user=";
 
 // The menu needs root for mounts. Distros differ in how you get it (sudo, doas on Alpine,
 // run0 on newer systemd, pkexec, or plain su), so try each that is installed, in that order.
@@ -111,7 +111,7 @@ void fitTerminal(int argc, char* argv[], bool mayReopen) {
     sleep(2);
 }
 
-// Who started us: our own --cbl-user=, else what sudo / doas / pkexec leave behind, else the login name
+// Who started us: our own --ccb-user=, else what sudo / doas / pkexec leave behind, else the login name
 std::string originalUser(int argc, char* argv[]) {
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];

@@ -82,7 +82,7 @@ Backend::runUser( const QStringList& args, int* exitCode, const QByteArray& inpu
     {
         *exitCode = p.exitStatus() == QProcess::NormalExit ? p.exitCode() : -1;
     }
-    // stderr carries the cloner's error lines ([cbl] ...); keep them for messages
+    // stderr carries the cloner's error lines ([ccb] ...); keep them for messages
     const QString err = QString::fromUtf8( p.readAllStandardError() ).trimmed();
     const QString out = QString::fromUtf8( p.readAllStandardOutput() );
     return err.isEmpty() ? out : out + QStringLiteral( "\n@@stderr " ) + err;
@@ -192,7 +192,7 @@ Backend::startRoot( const QString& title, const QStringList& args, bool cancella
     m_result.clear();
     m_cancelRequested = false;
 
-    QStringList clonerArgs { QStringLiteral( "--cbl-user=" ) + userName() };
+    QStringList clonerArgs { QStringLiteral( "--ccb-user=" ) + userName() };
     clonerArgs << args;
     if ( cancellable )
     {

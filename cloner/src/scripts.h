@@ -242,8 +242,8 @@ inline const char* ALPINE_INSTALLER = R"CBL(
 DISK="$1"
 FS="${2:-ext4}"
 COMPRESS="${3:-0}"
-T=/mnt/cbl-target
-LIVE_ROOT=/lib/live/mount/rootfs/filesystem.squashfs        # mounted by the CBL-SIDECAR
+T=/mnt/ccb-target
+LIVE_ROOT=/lib/live/mount/rootfs/filesystem.squashfs        # mounted by the CCB-SIDECAR
 LIVE_SQ=/lib/live/mount/medium/live/filesystem.squashfs
 
 fail() { echo "[FATAL ERROR] $*"; exit 1; }
@@ -255,7 +255,7 @@ if [ ! -d "$LIVE_ROOT/etc" ] && [ ! -f "$LIVE_SQ" ]; then
     # The live boot did not leave its mounts where expected: find the ISO by its label
     MEDIUM=$(findfs "LABEL=@@LIVE_LABEL@@" 2>/dev/null || blkid -L "@@LIVE_LABEL@@" 2>/dev/null || true)
     [ -n "$MEDIUM" ] || fail "the cloned system was not found - run this from the claudebackup live ISO."
-    OWN_MEDIUM=/mnt/cbl-medium
+    OWN_MEDIUM=/mnt/ccb-medium
     mkdir -p "$OWN_MEDIUM"
     mount -o ro "$MEDIUM" "$OWN_MEDIUM" || fail "cannot mount the live medium $MEDIUM."
     LIVE_SQ="$OWN_MEDIUM/live/filesystem.squashfs"

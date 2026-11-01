@@ -169,23 +169,28 @@ pkexec or su).
 
 1. **Packages** (as root): the build and ISO tools for your distro, plus the build dependencies of
    each tool you picked
-2. **Build**, as you, with nothing installed yet:
-   1. the cloner `claudebackup-linux`
-   2. the Qt6 app `claudebackup-linux-qt6`
-   3. ClaudeInstall, in the mode and interface you picked
-   4. CCCU (`cccu` + `cccu-gui`, needs GCC 14+)
-
-   If a tool fails to build, it is skipped, and the error log is named. The cloner is the only
-   one that must build.
-3. **Install** (as root, one step): everything that built. In clone mode it then sets up
-   `/etc/claudeinstall` to install the clone from the live ISO.
+2. **Build**, as you, all of it before anything is installed. Each step has a banner, and all
+   compiler output is shown live:
+   1. Claude Codex Backup, the cloner (`claudebackup-linux`)
+   2. Claude Codex Backup, the Qt6 app (`claudebackup-linux-qt6`)
+   3. Claude Codex Install (about 1,000 files), in the mode and interface you picked. Its
+      configure and compile output is also kept in `installer/build/`
+   4. Claude Codex CCU (`cccu` + `cccu-gui`, needs GCC 14+)
+3. **Install** (as root, one step): everything that compiled, with each install step shown.
+   - Clone mode sets up `/etc/claudeinstall` to install the clone from the live ISO. On Arch it
+     uses your claudemods preset via `claudeconfig`.
+   - Distro mode puts the profiles, images and `needed-files` (zips, scripts) in
+     `/usr/share/claudeinstall/`, where the profiles look for them.
+   - The `claude-codex-*` commands are added.
 4. **Desktop shortcut** (clone mode): **Install &lt;distro&gt;**. It is part of the clone, so the
    live ISO's desktop has it too, and it opens in a terminal if you picked the TUI only.
-5. **Start** the app
+5. **Complete**: a table of each tool (*built + installed*, *FAILED* with the log to open, or
+   *skipped*) and how to start it. **Nothing is started.** If a tool you picked failed,
+   `build.sh` exits with an error.
 
 Options skip the questions: `--erofs`, `--btrfs` / `--ext4`, `--no-installer`,
-`--installer-mode=clone|new|distro`, `--installer-ui=gui|tui|both`, `--no-gui`, `--no-cccu`,
-`--no-launch`. `--yes` answers every question with its default. Run `./build.sh help` to list them.
+`--installer-mode=clone|new|distro`, `--installer-ui=gui|tui|both`, `--no-gui`, `--no-cccu`.
+`--yes` answers every question with its default. Run `./build.sh help` to list them.
 
 ### One build script
 

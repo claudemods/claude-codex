@@ -52,7 +52,7 @@ inline bool schedule(const std::string& user) {
         "systemctl disable " + UNIT + " >/dev/null 2>&1\n"
         "clear\n"
         "printf '\\033[1;31m%s\\033[0m\\n\\n' " + shq(APP_NAME + "  " + APP_RELEASE + "  -  building the ISO at boot") + "\n" +
-        shq(selfPath()) + " " + shq("--cbl-user=" + user) + " --build-iso --console\n"
+        shq(selfPath()) + " " + shq("--ccb-user=" + user) + " --build-iso --console\n"
         "rc=$?\n"
         "if [ $rc -ne 0 ]; then\n"
         "    echo\n"

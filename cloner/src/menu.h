@@ -814,7 +814,7 @@ void updateApp() {
     tcsetattr(STDIN_FILENO, TCSANOW, &t);
     std::cout << "\033[?25h" << std::flush;
 
-    std::string userArg = "--cbl-user=" + USERNAME;
+    std::string userArg = "--ccb-user=" + USERNAME;
     execl(("/usr/bin/" + APP_BIN).c_str(), APP_BIN.c_str(), userArg.c_str(), (char*)nullptr);
     logError("Restart failed - start " + APP_BIN + " again to use " + latest + ".");
     pressAnyKey();

@@ -6,7 +6,7 @@
 // Per-family remaster modules, ported from penguins-eggs coa/brain.d/modules/*/remaster*.tmpl.
 // Each family supplies four pieces that the common plan (plan.h) plugs in:
 //   bootParams       kernel command line for the live medium
-//   initramfsCmd     builds /boot/cbl-initrd.img inside the chroot
+//   initramfsCmd     builds /boot/ccb-initrd.img inside the chroot
 //   copyKernelCmd    copies kernel + initrd into isodir/live
 //   hookSquashfsCmd  extra layout the distro's live initramfs expects
 //
@@ -71,7 +71,7 @@ fi
 
 # Work on a throwaway copy of the initramfs config so /etc/initramfs-tools in the clone stays
 # exactly as it is. Adds the modules a live boot needs (virtual storage, iso9660, overlay).
-CONF_DIR=$(mktemp -d /tmp/cbl-initramfs.XXXXXX)
+CONF_DIR=$(mktemp -d /tmp/ccb-initramfs.XXXXXX)
 trap 'rm -rf "$CONF_DIR"' EXIT
 cp -a /etc/initramfs-tools/. "$CONF_DIR/" 2>/dev/null || true
 touch "$CONF_DIR/modules"
@@ -81,15 +81,15 @@ for mod in virtio_pci virtio_blk virtio_scsi isofs overlay@@EROFS@@; do
     fi
 done
 # Setup > Edit Configs > Initramfs Modules (staged by the build)
-if [ -f /tmp/cbl-initramfs.modules ]; then
+if [ -f /tmp/ccb-initramfs.modules ]; then
     echo "-> Adding the custom initramfs modules..."
-    grep -v '^[[:space:]]*#' /tmp/cbl-initramfs.modules >> "$CONF_DIR/modules" || true
-    rm -f /tmp/cbl-initramfs.modules
+    grep -v '^[[:space:]]*#' /tmp/ccb-initramfs.modules >> "$CONF_DIR/modules" || true
+    rm -f /tmp/ccb-initramfs.modules
 fi
 
-mkinitramfs -d "$CONF_DIR" -o /boot/cbl-initrd.img "$KERNEL_VERSION"
-if [ ! -f /boot/cbl-initrd.img ]; then
-    echo "[FATAL ERROR] /boot/cbl-initrd.img was not generated!"
+mkinitramfs -d "$CONF_DIR" -o /boot/ccb-initrd.img "$KERNEL_VERSION"
+if [ ! -f /boot/ccb-initrd.img ]; then
+    echo "[FATAL ERROR] /boot/ccb-initrd.img was not generated!"
     exit 1
 fi
 )CBL";
@@ -100,7 +100,7 @@ fi
 // working-hooks-btrfs-ext4 hooks on the liveroot tmpfs (/tmp is never cloned), pointing the hooks
 // at the staged files instead of /etc/initcpio and /usr/lib/initcpio/udev.
 inline std::string initramfsPrepArch(const Context& c) {
-    return "set -e\nSRC=" + shq(archZipDir()) + "\nDEST=" + shq(c.liveRoot + "/tmp/cbl-initcpio") + "\n" + R"CBL(
+    return "set -e\nSRC=" + shq(archZipDir()) + "\nDEST=" + shq(c.liveRoot + "/tmp/ccb-initcpio") + "\n" + R"CBL(
 if [ ! -d "$SRC/working-hooks-btrfs-ext4" ] || [ ! -f "$SRC/build-image-arch-img/mkinitcpio.conf" ]; then
     echo "[FATAL ERROR] the embedded Arch files were not extracted to $SRC!"
     exit 1
@@ -110,8 +110,8 @@ rm -rf "$DEST"
 mkdir -p "$DEST"
 cp -a "$SRC/working-hooks-btrfs-ext4/." "$DEST/"
 cp -f "$SRC/build-image-arch-img/mkinitcpio.conf" "$SRC/build-image-arch-img/11-dm-initramfs.rules" "$DEST/"
-sed -i 's|/usr/lib/initcpio/udev/11-dm-initramfs.rules|/tmp/cbl-initcpio/11-dm-initramfs.rules|' "$DEST/install/arch"
-sed -i 's|/etc/initcpio/arch_shutdown|/tmp/cbl-initcpio/arch_shutdown|' "$DEST/install/arch_shutdown"
+sed -i 's|/usr/lib/initcpio/udev/11-dm-initramfs.rules|/tmp/ccb-initcpio/11-dm-initramfs.rules|' "$DEST/install/arch"
+sed -i 's|/etc/initcpio/arch_shutdown|/tmp/ccb-initcpio/arch_shutdown|' "$DEST/install/arch_shutdown"
 )CBL";
 }
 
@@ -127,7 +127,7 @@ if [ ! -d "/lib/modules/$KERNEL_VERSION" ]; then
     KERNEL_VERSION=$(ls -1 /lib/modules | grep -E '^[0-9]' | head -n 1)
 fi
 
-HOOKS_DIR=/tmp/cbl-initcpio
+HOOKS_DIR=/tmp/ccb-initcpio
 if [ ! -f "$HOOKS_DIR/mkinitcpio.conf" ]; then
     echo "[FATAL ERROR] staged hooks not found in $HOOKS_DIR!"
     exit 1
@@ -151,7 +151,7 @@ rm -rf /etc/mkinitcpio.conf.d.bak /usr/lib/mkinitcpio.conf.d.bak "$HOOKS_DIR"
 # HOOKS=(base udev arch_shutdown arch arch_loop_mnt arch_kms modconf block filesystems keyboard keymap)
 echo "-> Generating unique live initramfs for kernel $KERNEL_VERSION..."
 mkinitcpio -c "$HOOKS_DIR/mkinitcpio.conf" -D "$HOOKS_DIR" -D /etc/initcpio -D /usr/lib/initcpio \
-    -k "$KERNEL_VERSION" -g "/boot/cbl-initrd.img"
+    -k "$KERNEL_VERSION" -g "/boot/ccb-initrd.img"
 )CBL";
 }
 
@@ -230,17 +230,17 @@ fi
 // dracut's main config: the user's edited copy (Setup > Edit Configs > Dracut Config) when there is one
 inline const char* DRACUT_CUSTOM_CONF = R"CBL(
 DRACUT_CONF=""
-if [ -f /tmp/cbl-dracut.conf ]; then
+if [ -f /tmp/ccb-dracut.conf ]; then
     echo "-> Using the custom dracut config."
-    DRACUT_CONF="--conf /tmp/cbl-dracut.conf"
+    DRACUT_CONF="--conf /tmp/ccb-dracut.conf"
 fi
 )CBL";
 
 inline std::string initramfsFedora(const Context& c) {
     std::string s = std::string("#!/bin/bash\nset -e\n# fedora: initramfs\n") + DRACUT_CUSTOM_CONF + R"CBL(
 echo "Generating live initramfs (dracut)..."
-dracut -f --no-hostonly $DRACUT_CONF --add "dmsquash-live livenet" --add-drivers "sr_mod iso9660 squashfs loop overlay@@EROFS@@" /boot/cbl-initrd.img 2>&1 | tail -1
-rm -f /tmp/cbl-dracut.conf
+dracut -f --no-hostonly $DRACUT_CONF --add "dmsquash-live livenet" --add-drivers "sr_mod iso9660 squashfs loop overlay@@EROFS@@" /boot/ccb-initrd.img 2>&1 | tail -1
+rm -f /tmp/ccb-dracut.conf
 )CBL";
     return replaceAll(s, "@@EROFS@@", erofsDriver(c));
 }
@@ -249,8 +249,8 @@ inline std::string initramfsOpensuse(const Context& c) {
     std::string s = std::string("#!/bin/bash\nset -e\n# opensuse: initramfs\n") + DRACUT_CUSTOM_CONF + R"CBL(
 echo "Generating live initramfs (dracut)..."
 # Drivers for physical and virtual controllers (AHCI, VirtIO, IDE)
-dracut -f --no-hostonly $DRACUT_CONF --add "dmsquash-live livenet" --add-drivers "sr_mod iso9660 squashfs loop overlay@@EROFS@@ ahci virtio_blk virtio_pci virtio_scsi cdrom ata_piix sd_mod" /boot/cbl-initrd.img
-rm -f /tmp/cbl-dracut.conf
+dracut -f --no-hostonly $DRACUT_CONF --add "dmsquash-live livenet" --add-drivers "sr_mod iso9660 squashfs loop overlay@@EROFS@@ ahci virtio_blk virtio_pci virtio_scsi cdrom ata_piix sd_mod" /boot/ccb-initrd.img
+rm -f /tmp/ccb-dracut.conf
 )CBL";
     return replaceAll(s, "@@EROFS@@", erofsDriver(c));
 }
@@ -299,14 +299,14 @@ fi
 DRIVERS="iso9660 squashfs loop overlay"
 has_mod sr_mod && DRIVERS="sr_mod $DRIVERS"
 # multipath is not needed to boot a live ISO and fails on systems with multipath-tools installed
-if ! dracut -f --no-hostonly $DRACUT_CONF --add "dmsquash-live" --omit "multipath" --add-drivers "$DRIVERS" --kver "$KERNEL_VERSION" /boot/cbl-initrd.img; then
+if ! dracut -f --no-hostonly $DRACUT_CONF --add "dmsquash-live" --omit "multipath" --add-drivers "$DRIVERS" --kver "$KERNEL_VERSION" /boot/ccb-initrd.img; then
     echo "[FATAL ERROR] dracut could not build the live initramfs - see its messages above."
     echo "              Check: ls /usr/lib/dracut/modules.d | grep squash   (re-emerge sys-kernel/dracut if empty)"
     exit 1
 fi
-rm -f /tmp/cbl-dracut.conf
-if [ ! -f /boot/cbl-initrd.img ]; then
-    echo "[FATAL ERROR] /boot/cbl-initrd.img was not generated!"
+rm -f /tmp/ccb-dracut.conf
+if [ ! -f /boot/ccb-initrd.img ]; then
+    echo "[FATAL ERROR] /boot/ccb-initrd.img was not generated!"
     exit 1
 fi
 )CBL";
@@ -319,15 +319,15 @@ inline std::string initramfsAlpine(const Context&) {
     std::string s = R"CBL(#!/bin/bash
 set -e
 INIT_FILE="/usr/share/mkinitfs/initramfs-init"
-PATCH_FILE="/tmp/cbl-sidecar.patch"
-CUSTOM_INIT="/tmp/initramfs-cbl-init"
+PATCH_FILE="/tmp/ccb-sidecar.patch"
+CUSTOM_INIT="/tmp/initramfs-ccb-init"
 
 # mkinitfs reads its live config from /etc/mkinitfs: remove what we add so the clone is unchanged
-trap 'rm -f /etc/mkinitfs/live.conf /etc/mkinitfs/features.d/cbllive.modules "$CUSTOM_INIT" "$PATCH_FILE"' EXIT
+trap 'rm -f /etc/mkinitfs/live.conf /etc/mkinitfs/features.d/ccblive.modules "$CUSTOM_INIT" "$PATCH_FILE"' EXIT
 
-echo "-> 1. Generating the CBL-SIDECAR rescue (standard /run/live/medium)..."
+echo "-> 1. Generating the CCB-SIDECAR rescue (standard /run/live/medium)..."
 cat << 'EOF' > "$PATCH_FILE"
-    echo ">>> [CBL-SIDECAR] Alpine boot failed. Starting claudemods rescue... <<<" > /dev/console
+    echo ">>> [CCB-SIDECAR] Alpine boot failed. Starting claudemods rescue... <<<" > /dev/console
 
     modprobe isofs squashfs loop overlay 2>/dev/null
 
@@ -335,7 +335,7 @@ cat << 'EOF' > "$PATCH_FILE"
     LABEL=$(echo "$CMDLINE" | tr ' ' '\n' | grep -o 'alpinelivelabel=[^ ]*' | cut -d= -f2)
     [ -z "$LABEL" ] && LABEL="@@LIVE_LABEL@@"
 
-    echo ">>> [CBL-SIDECAR] Looking for volume with LABEL: $LABEL <<<" > /dev/console
+    echo ">>> [CCB-SIDECAR] Looking for volume with LABEL: $LABEL <<<" > /dev/console
 
     for wait in 1 2 3 4 5; do
         mdev -s 2>/dev/null
@@ -358,11 +358,11 @@ cat << 'EOF' > "$PATCH_FILE"
             mount --move /dev /sysroot/dev
             mkdir -p /sysroot/lib/live/mount
             mount --move /live_data /sysroot/lib/live/mount 2>/dev/null
-            echo ">>> [CBL-SIDECAR] SYSTEM READY! switch_root... <<<" > /dev/console
+            echo ">>> [CCB-SIDECAR] SYSTEM READY! switch_root... <<<" > /dev/console
             exec switch_root -c /dev/console /sysroot /sbin/init
         fi
     fi
-    echo ">>> [CBL-SIDECAR] Rescue failed. Back to Alpine shell. <<<" > /dev/console
+    echo ">>> [CCB-SIDECAR] Rescue failed. Back to Alpine shell. <<<" > /dev/console
 EOF
 
 echo "-> 2. Injecting into a temporary init file (host untouched)..."
@@ -380,7 +380,7 @@ chmod +x "$CUSTOM_INIT"
 
 echo "-> 3. Configuring mkinitfs modules for LIVE..."
 mkdir -p /etc/mkinitfs/features.d
-cat << 'MODULES' > /etc/mkinitfs/features.d/cbllive.modules
+cat << 'MODULES' > /etc/mkinitfs/features.d/ccblive.modules
 kernel/fs/isofs
 kernel/fs/squashfs
 kernel/fs/overlayfs
@@ -388,11 +388,11 @@ kernel/fs/loop
 kernel/lib/libcrc32c*
 MODULES
 
-echo 'features="ata base ide scsi cdrom usb virtio ext4 squashfs cbllive"' > /etc/mkinitfs/live.conf
+echo 'features="ata base ide scsi cdrom usb virtio ext4 squashfs ccblive"' > /etc/mkinitfs/live.conf
 
 echo "-> 4. Building initramfs with the custom init..."
 KVER=$(ls -1 /lib/modules/ | head -n 1)
-mkinitfs -i "$CUSTOM_INIT" -c /etc/mkinitfs/live.conf -o /boot/initramfs-cbl "$KVER"
+mkinitfs -i "$CUSTOM_INIT" -c /etc/mkinitfs/live.conf -o /boot/initramfs-ccb "$KVER"
 rm -f "$CUSTOM_INIT"
 echo "-> alpine initramfs completed."
 )CBL";
@@ -433,8 +433,8 @@ inline std::string initramfsPrepCmd(const Context& c) {
         if (!mk.empty()) s += "echo \"-> Using your edited mkinitcpio.conf\"\ncp -f " + shq(mk) + " \"$DEST/mkinitcpio.conf\"\n";
         return s;
     }
-    if (f == "debian") return stageCustomCmd(c, "initramfs-modules", "cbl-initramfs.modules");
-    if (f == "fedora" || f == "opensuse" || f == "gentoo") return stageCustomCmd(c, "dracut.conf", "cbl-dracut.conf");
+    if (f == "debian") return stageCustomCmd(c, "initramfs-modules", "ccb-initramfs.modules");
+    if (f == "fedora" || f == "opensuse" || f == "gentoo") return stageCustomCmd(c, "dracut.conf", "ccb-dracut.conf");
     return "";
 }
 
@@ -471,8 +471,8 @@ if [ ! -f "$KERNEL_SRC" ]; then
     exit 1
 fi
 
-if [ -f "$LIVEROOT/boot/cbl-initrd.img" ]; then
-    INITRD_SRC="$LIVEROOT/boot/cbl-initrd.img"
+if [ -f "$LIVEROOT/boot/ccb-initrd.img" ]; then
+    INITRD_SRC="$LIVEROOT/boot/ccb-initrd.img"
 elif [ -f "$LIVEROOT/boot/initrd.img-$KERNEL_VERSION" ]; then
     INITRD_SRC="$LIVEROOT/boot/initrd.img-$KERNEL_VERSION"
 else
@@ -487,7 +487,7 @@ mkdir -p "$ISODIR/live"
 cp "$KERNEL_SRC" "$ISODIR/live/vmlinuz"
 echo "-> Copying initrd ($INITRD_SRC -> $ISODIR/live/initrd.img)..."
 cp "$INITRD_SRC" "$ISODIR/live/initrd.img"
-rm -f "$LIVEROOT/boot/cbl-initrd.img"
+rm -f "$LIVEROOT/boot/ccb-initrd.img"
 echo "-> Copy completed."
 )CBL";
     } else if (f == "archlinux") {
@@ -524,22 +524,22 @@ echo "-> Copying from: $KERNEL_SRC"
 mkdir -p "$ISODIR/boot"
 cp "$KERNEL_SRC" "$ISODIR/boot/vmlinuz-x86_64"
 
-if [ ! -f "$LIVEROOT/boot/cbl-initrd.img" ]; then
-    echo "[FATAL ERROR] cbl-initrd.img not found in $LIVEROOT/boot!"
+if [ ! -f "$LIVEROOT/boot/ccb-initrd.img" ]; then
+    echo "[FATAL ERROR] ccb-initrd.img not found in $LIVEROOT/boot!"
     exit 1
 fi
-echo "-> Copying cbl-initrd.img..."
-cp "$LIVEROOT/boot/cbl-initrd.img" "$ISODIR/boot/initramfs-x86_64.img"
+echo "-> Copying ccb-initrd.img..."
+cp "$LIVEROOT/boot/ccb-initrd.img" "$ISODIR/boot/initramfs-x86_64.img"
 
-rm -f "$LIVEROOT/boot/initramfs-cbl-initrd.img"
-rm -f "$LIVEROOT/boot/cbl-initrd.img"
+rm -f "$LIVEROOT/boot/initramfs-ccb-initrd.img"
+rm -f "$LIVEROOT/boot/ccb-initrd.img"
 echo "-> Copy completed."
 )CBL";
     } else if (f == "fedora" || f == "opensuse") {
         s += R"CBL(
 KERNEL_VERSION=$(uname -r)
 echo "-> Copying Kernel ($KERNEL_VERSION)..."
-INITRD_SRC="$LIVEROOT/boot/cbl-initrd.img"
+INITRD_SRC="$LIVEROOT/boot/ccb-initrd.img"
 DEST_DIR="$ISODIR/live"
 
 # The kernel image of the version the initramfs was built for (its modules). It is not always
@@ -571,7 +571,7 @@ fi
 
 mkdir -p "$DEST_DIR"
 cp "$KERNEL_SRC" "$DEST_DIR/vmlinuz"
-echo "-> Copying cbl-initrd.img..."
+echo "-> Copying ccb-initrd.img..."
 cp "$INITRD_SRC" "$DEST_DIR/initrd.img"
 echo "-> Copy completed."
 )CBL";
@@ -584,13 +584,13 @@ if [ ! -f "$LIVEROOT/boot/vmlinuz-$FLAVOR" ]; then
     echo "              If the kernel was updated since the last reboot, reboot into it and build again."
     exit 1
 fi
-if [ ! -f "$LIVEROOT/boot/initramfs-cbl" ]; then
-    echo "[FATAL ERROR] initramfs-cbl was not generated in $LIVEROOT/boot!"
+if [ ! -f "$LIVEROOT/boot/initramfs-ccb" ]; then
+    echo "[FATAL ERROR] initramfs-ccb was not generated in $LIVEROOT/boot!"
     exit 1
 fi
 mkdir -p "$ISODIR/live"
 cp "$LIVEROOT/boot/vmlinuz-$FLAVOR" "$ISODIR/live/vmlinuz"
-cp "$LIVEROOT/boot/initramfs-cbl" "$ISODIR/live/initrd.img"
+cp "$LIVEROOT/boot/initramfs-ccb" "$ISODIR/live/initrd.img"
 )CBL";
     } else if (f == "gentoo") {
         // installkernel (vmlinuz-*), genkernel (kernel-*), dist-kernel / kernel-install
@@ -618,16 +618,16 @@ if [ -z "$KERNEL_SRC" ] || [ ! -f "$KERNEL_SRC" ]; then
     echo "[FATAL ERROR] Kernel for $KERNEL_VERSION not found in $LIVEROOT/boot, /usr/lib/modules or /usr/src!"
     exit 1
 fi
-if [ ! -f "$LIVEROOT/boot/cbl-initrd.img" ]; then
-    echo "[FATAL ERROR] cbl-initrd.img not found in $LIVEROOT/boot! dracut did not generate it."
+if [ ! -f "$LIVEROOT/boot/ccb-initrd.img" ]; then
+    echo "[FATAL ERROR] ccb-initrd.img not found in $LIVEROOT/boot! dracut did not generate it."
     exit 1
 fi
 
 echo "-> Copying from: $KERNEL_SRC"
 mkdir -p "$ISODIR/live"
 cp "$KERNEL_SRC" "$ISODIR/live/vmlinuz"
-cp "$LIVEROOT/boot/cbl-initrd.img" "$ISODIR/live/initrd.img"
-rm -f "$LIVEROOT/boot/cbl-initrd.img"
+cp "$LIVEROOT/boot/ccb-initrd.img" "$ISODIR/live/initrd.img"
+rm -f "$LIVEROOT/boot/ccb-initrd.img"
 echo "-> Copy completed."
 )CBL";
     }

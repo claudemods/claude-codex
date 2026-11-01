@@ -49,17 +49,25 @@ std::string session_yaml() {
     return y.str();
 }
 
-std::string native_yaml() {
+// The container owns the screen (its own login on a VT). gpu = true: Native, with the GPU passed through.
+// gpu = false: Server - no usable GPU (the only screen is the BMC / iKVM framebuffer), so no GPU device: Incus
+// would refuse to start a container whose GPU device does not exist. Plasma draws in software there (rootfs).
+std::string screen_yaml(bool gpu) {
     std::ostringstream y;
-    y << "description: cccu desktop - SDDM / Plasma Login on a real VT with GPU, input and sound\n"
-         "config:\n"
+    y << (gpu ? "description: cccu desktop - SDDM / Plasma Login on a real VT with GPU, input and sound\n"
+              : "description: cccu server - login on a real VT, software rendering (no GPU), input and sound\n")
+      << "config:\n"
          "  security.privileged: \"true\"\n"
          "  security.nesting: \"true\"\n"
          "  raw.lxc: |-\n"
          "    lxc.apparmor.profile = unconfined\n";
     for (const char* rule : kDeviceAllow) y << "    lxc.cgroup2.devices.allow = " << rule << "\n";
 
-    gpu_device(y);
+    if (gpu) {
+        gpu_device(y);
+    } else {
+        y << "devices:\n";
+    }
 
     for (int vt = 0; vt <= 7; ++vt) char_device(y, "tty" + std::to_string(vt), "/dev/tty" + std::to_string(vt));
     char_device(y, "fb0", "/dev/fb0");
@@ -85,7 +93,13 @@ const char* name(Display display) {
 }
 
 Result install(Display display) {
-    return incus::ensure_profile(name(display), container_owns_screen(display) ? native_yaml() : session_yaml());
+    switch (display) {
+        case Display::Native: return incus::ensure_profile(name(display), screen_yaml(true));    // GPU on the container's own VT
+        case Display::Server: return incus::ensure_profile(name(display), screen_yaml(false));   // no GPU: software rendering
+        case Display::Session: break;
+    }
+    // Default: the host's login shows the container's Plasma through cage, with the GPU (as before server mode existed)
+    return incus::ensure_profile(name(display), session_yaml());
 }
 
 }  // namespace cccu::profiles

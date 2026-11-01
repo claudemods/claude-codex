@@ -14,7 +14,7 @@
 #   6. builds and installs CCCU (cccu/: clone this system into an Incus container; its "Create ISO"
 #      uses the same cloner engine and Claude Codex Install) - Arch, Debian, Fedora, openSUSE; needs GCC 14+
 #   7. puts an "Install <distro>" shortcut on the Desktop (it is part of the clone, so the live
-#      ISO's desktop has it) and starts the app
+#      ISO's desktop has it), then shows what was built and how to start each tool (it starts nothing)
 # Plain POSIX sh, so it also runs on a stock Alpine (sh build.sh) without bash.
 #
 #   ./build.sh                 everything, asking a few questions
@@ -30,7 +30,6 @@
 #   ./build.sh --installer-ui=gui|tui|both
 #                              Claude Codex Install's interface (asked when not given): Qt6 window, terminal
 #                              (claudeinstall-tui) or both. --installer-tui = both
-#   ./build.sh --no-launch     do not start the app at the end
 #   ./build.sh help            this text
 set -e
 
@@ -44,7 +43,7 @@ CCCU_SRC="$SUITE/cccu"
 TARGET="claudebackup-linux"
 GUI_TARGET="claudebackup-linux-qt6"
 
-# Messages are light green (like the app's [cbl] lines), the output of the commands after them is
+# Messages are light green (like the app's [ccb] lines), the output of the commands after them is
 # dark green; "==>" and errors are red. say() leaves the terminal dark green for the commands' output.
 say() { printf '\033[1;31m==>\033[0;92m %s\033[0;32m\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -299,29 +298,36 @@ install_alpine_installer_tools() {
 }
 
 # What Claude Codex Install needs on the installed system's side: rsync / GRUB / EFI tools, per distro
+# (the old Calamares packages pulled the filesystem tools in as dependencies; ClaudeInstall is built
+# from source, so they are named here: its partition step formats ext4 / btrfs / xfs / FAT and LUKS)
 install_installer_runtime() {
-    say "Installing GRUB, efibootmgr and rsync (used by Claude Codex Install in the live ISO)"
+    say "Installing GRUB, efibootmgr, rsync and the filesystem tools (used by Claude Codex Install in the live ISO)"
     ARCH=$(uname -m)
     case "$FAMILY" in
         debian)
-            PKGS="rsync efibootmgr dosfstools os-prober"
+            PKGS="rsync efibootmgr dosfstools os-prober e2fsprogs btrfs-progs xfsprogs cryptsetup console-setup"
             [ "$ARCH" = "x86_64" ] && PKGS="$PKGS grub-pc-bin grub-efi-amd64-bin"
             # shellcheck disable=SC2086
             apt-get install -y $PKGS ;;
         arch)
-            pacman -S --needed --noconfirm rsync efibootmgr dosfstools grub os-prober ;;
+            pacman -S --needed --noconfirm rsync efibootmgr dosfstools grub os-prober e2fsprogs btrfs-progs xfsprogs cryptsetup
+            # ckbcomp (keyboard module: console keymap from the X layout) was in the old Calamares zip;
+            # CachyOS / Chaotic ship it, plain Arch only has it in the AUR
+            pacman -S --needed --noconfirm ckbcomp 2>/dev/null ||
+                say "ckbcomp is not in your repositories (AUR on plain Arch) - the keyboard step falls back to the X layout only" ;;
         fedora)
-            PKGS="rsync efibootmgr dosfstools"
+            PKGS="rsync efibootmgr dosfstools e2fsprogs btrfs-progs xfsprogs cryptsetup"
             [ "$ARCH" = "x86_64" ] && PKGS="$PKGS grub2-pc-modules grub2-efi-x64-modules"
             # shellcheck disable=SC2086
             dnf install -y $PKGS ;;
         opensuse)
-            PKGS="rsync efibootmgr dosfstools"
+            PKGS="rsync efibootmgr dosfstools e2fsprogs btrfsprogs xfsprogs cryptsetup"
             [ "$ARCH" = "x86_64" ] && PKGS="$PKGS grub2-i386-pc grub2-x86_64-efi"
             # shellcheck disable=SC2086
             zypper --non-interactive --no-refresh install --no-recommends $PKGS ;;
         gentoo)
-            emerge --noreplace --ask=n net-misc/rsync sys-boot/grub sys-boot/efibootmgr sys-fs/dosfstools ;;
+            emerge --noreplace --ask=n net-misc/rsync sys-boot/grub sys-boot/efibootmgr sys-fs/dosfstools \
+                sys-fs/e2fsprogs sys-fs/btrfs-progs sys-fs/xfsprogs sys-fs/cryptsetup ;;
     esac
 }
 
@@ -402,9 +408,9 @@ configure_installer() {
     # --- settings.conf -------------------------------------------------------
     EXEC="partition mount unpackfs"
     [ "$SYSTEMD" = 1 ] && EXEC="$EXEC machineid"
-    EXEC="$EXEC fstab locale keyboard localecfg shellprocess@cblkernel $INITRAMFS grubcfg bootloader"
+    EXEC="$EXEC fstab locale keyboard localecfg shellprocess@ccbkernel $INITRAMFS grubcfg bootloader"
     # Fedora: after the boot loader, fix what the clone carries over from the old system (boot entries)
-    [ "$FAMILY" = fedora ] && EXEC="$EXEC shellprocess@cblfedora"
+    [ "$FAMILY" = fedora ] && EXEC="$EXEC shellprocess@ccbfedora"
     [ -f "$MOD/preservefiles.conf" ] && EXEC="$EXEC preservefiles"
     EXEC="$EXEC umount"
     {
@@ -413,13 +419,13 @@ configure_installer() {
         echo "---"
         echo "modules-search: [ local ]"
         echo "instances:"
-        echo "- id: cblkernel"
+        echo "- id: ccbkernel"
         echo "  module: shellprocess"
-        echo "  config: shellprocess_cblkernel.conf"
+        echo "  config: shellprocess_ccbkernel.conf"
         if [ "$FAMILY" = fedora ]; then
-            echo "- id: cblfedora"
+            echo "- id: ccbfedora"
             echo "  module: shellprocess"
-            echo "  config: shellprocess_cblfedora.conf"
+            echo "  config: shellprocess_ccbfedora.conf"
         fi
         echo "sequence:"
         echo "- show:"
@@ -516,11 +522,11 @@ EOF
     # The image is a bind of "/", so a separate /boot (vfat ESP as /boot, Gentoo, Fedora) is empty
     # in the clone: give the installed system a kernel before the initramfs step. Runs on the live
     # system (dontChroot); Claude Codex Install passes its target root as ${ROOT}.
-    cat > "$CFG/scripts/cbl-kernel.sh" << 'EOF'
+    cat > "$CFG/scripts/ccb-kernel.sh" << 'EOF'
 #!/bin/sh
 R="${1:-}"
 [ -n "$R" ] || R=$(awk '$2 ~ /^\/tmp\/(claudeinstall|calamares)-root-[^\/]*$/ {print $2}' /proc/mounts | head -n 1)
-[ -d "$R" ] || { echo "cbl-kernel: target root not found"; exit 1; }
+[ -d "$R" ] || { echo "ccb-kernel: target root not found"; exit 1; }
 KV=$(uname -r)
 if ls "$R"/boot/vmlinuz-* "$R"/boot/kernel-* >/dev/null 2>&1; then
     exit 0
@@ -533,42 +539,42 @@ for k in "$R/usr/lib/modules/$KV/vmlinuz" "$R/lib/modules/$KV/vmlinuz" \
          /run/live/medium/live/vmlinuz /run/initramfs/live/live/vmlinuz /run/arch/bootmnt/boot/vmlinuz-x86_64; do
     if [ -f "$k" ]; then
         cp "$k" "$R/boot/$NAME"
-        echo "cbl-kernel: /boot was empty, installed $k as /boot/$NAME"
+        echo "ccb-kernel: /boot was empty, installed $k as /boot/$NAME"
         break
     fi
 done
-[ -f "$R/boot/$NAME" ] || { echo "cbl-kernel: no kernel found for $KV"; exit 1; }
+[ -f "$R/boot/$NAME" ] || { echo "ccb-kernel: no kernel found for $KV"; exit 1; }
 # Fedora's GRUB boots BLS entries: create the entry for the copied kernel
 if [ "@FAMILY@" = fedora ] && [ -x "$R/usr/bin/kernel-install" ]; then
     chroot "$R" kernel-install add "$KV" "/boot/$NAME" || true
 fi
 exit 0
 EOF
-    sed -i "s/@FAMILY@/$FAMILY/" "$CFG/scripts/cbl-kernel.sh"
-    chmod 755 "$CFG/scripts/cbl-kernel.sh"
-    printf '%s\n' '---' 'dontChroot: true' 'timeout: 600' 'script:' '    - "/etc/claudeinstall/scripts/cbl-kernel.sh ${ROOT}"' \
-        > "$MOD/shellprocess_cblkernel.conf"
+    sed -i "s/@FAMILY@/$FAMILY/" "$CFG/scripts/ccb-kernel.sh"
+    chmod 755 "$CFG/scripts/ccb-kernel.sh"
+    printf '%s\n' '---' 'dontChroot: true' 'timeout: 600' 'script:' '    - "/etc/claudeinstall/scripts/ccb-kernel.sh ${ROOT}"' \
+        > "$MOD/shellprocess_ccbkernel.conf"
 
     if [ "$FAMILY" = fedora ]; then
         # The clone's boot entries, /etc/kernel/cmdline and /etc/default/grub still name the OLD
         # system's root (UUID, btrfs subvolume, live options): the installed system then hangs
         # after Plymouth. Rewrite them for the new disk, rebuild the initramfs and boot entries,
         # and let SELinux relabel the copied files.
-        cat > "$CFG/scripts/cbl-fedora.sh" << 'EOF'
+        cat > "$CFG/scripts/ccb-fedora.sh" << 'EOF'
 #!/bin/sh
 R="${1:-}"
 [ -n "$R" ] || R=$(awk '$2 ~ /^\/tmp\/(claudeinstall|calamares)-root-[^\/]*$/ {print $2}' /proc/mounts | head -n 1)
-[ -d "$R" ] || { echo "cbl-fedora: target root not found"; exit 1; }
+[ -d "$R" ] || { echo "ccb-fedora: target root not found"; exit 1; }
 chroot "$R" /bin/sh -s << 'CHROOT'
 ROOT_UUID=$(findmnt -no UUID / 2>/dev/null)
 FSTYPE=$(findmnt -no FSTYPE / 2>/dev/null)
 FSROOT=$(findmnt -no FSROOT / 2>/dev/null | sed 's/\[.*//')
-[ -n "$ROOT_UUID" ] || { echo "cbl-fedora: root UUID not found, leaving the boot entries alone"; exit 0; }
+[ -n "$ROOT_UUID" ] || { echo "ccb-fedora: root UUID not found, leaving the boot entries alone"; exit 0; }
 ARGS="root=UUID=$ROOT_UUID ro"
 if [ "$FSTYPE" = btrfs ] && [ -n "$FSROOT" ] && [ "$FSROOT" != "/" ]; then
     ARGS="$ARGS rootflags=subvol=${FSROOT#/}"
 fi
-echo "cbl-fedora: kernel command line: $ARGS rhgb quiet"
+echo "ccb-fedora: kernel command line: $ARGS rhgb quiet"
 mkdir -p /etc/kernel
 echo "$ARGS rhgb quiet" > /etc/kernel/cmdline
 if [ -f /etc/default/grub ]; then
@@ -598,9 +604,9 @@ touch /.autorelabel
 exit 0
 CHROOT
 EOF
-        chmod 755 "$CFG/scripts/cbl-fedora.sh"
-        printf '%s\n' '---' 'dontChroot: true' 'timeout: 900' 'script:' '    - "/etc/claudeinstall/scripts/cbl-fedora.sh ${ROOT}"' \
-            > "$MOD/shellprocess_cblfedora.conf"
+        chmod 755 "$CFG/scripts/ccb-fedora.sh"
+        printf '%s\n' '---' 'dontChroot: true' 'timeout: 900' 'script:' '    - "/etc/claudeinstall/scripts/ccb-fedora.sh ${ROOT}"' \
+            > "$MOD/shellprocess_ccbfedora.conf"
     fi
 
     REBOOT="reboot"
@@ -624,6 +630,31 @@ requirements:
         - storage
         - root
 EOF
+
+    # Arch: the installer's own claudemods preset (config/claudemods: module sequence with initcpio,
+    # display manager, services, LUKS, network, hwclock, preservefiles; btrfs subvolumes), applied the
+    # way Claude Codex Install is meant to be set up - with its claudeconfig tool - then tuned for this
+    # clone. The generic files above stay as the fallback when the preset or claudeconfig is missing.
+    if [ "$FAMILY" = arch ] && command -v claudeconfig >/dev/null 2>&1 && [ -f "$SHARE/presets/claudemods/settings.conf" ]; then
+        say "Applying the claudemods preset (claudeconfig preset claudemods)"
+        claudeconfig preset claudemods
+        claudeconfig image "$SOURCEFS" "$UNPACK"
+        claudeconfig kernel "$PKGBASE"
+        if [ "$BTRFS" = 1 ]; then
+            claudeconfig fs default btrfs
+            claudeconfig btrfs compress zstd:22
+        else
+            claudeconfig fs default ext4
+            claudeconfig btrfs compress off
+        fi
+        # the kernel fix-up (ccb-kernel.sh, written above) runs before the initramfs is built
+        S="$CFG/settings.conf"
+        if ! grep -q 'shellprocess@ccbkernel' "$S"; then
+            sed -i -E 's/^([[:space:]]*-[[:space:]]*)initcpiocfg[[:space:]]*$/\1shellprocess@ccbkernel\n\1initcpiocfg/' "$S"
+            grep -q '^instances:' "$S" || sed -i 's/^sequence:/instances:\n- id: ccbkernel\n  module: shellprocess\n  config: shellprocess_ccbkernel.conf\n\nsequence:/' "$S"
+        fi
+        grep -q 'shellprocess@ccbkernel' "$S" || say "warning: could not add the kernel fix-up step to $S"
+    fi
 
     # The claudemods sidebar colours (claudeinstall-colors comes with Claude Codex Install)
     if command -v claudeinstall-colors >/dev/null 2>&1; then claudeinstall-colors claudemods >/dev/null 2>&1 || true; fi
@@ -1064,7 +1095,7 @@ esac
 # =============================================================================
 # User phase: questions, root phase, build, install, launch
 # =============================================================================
-ASSUME_YES=0; WANT_INSTALLER=""; WANT_GUI=1; WANT_BTRFS=""; WANT_EROFS=0; LAUNCH=1; WANT_CCCU=1
+ASSUME_YES=0; WANT_INSTALLER=""; WANT_GUI=1; WANT_BTRFS=""; WANT_EROFS=0; WANT_CCCU=1
 IMODE=""; IUI=""   # Claude Codex Install's mode and interface: asked below unless given
 for a in "$@"; do
     case "$a" in
@@ -1075,7 +1106,7 @@ for a in "$@"; do
         --btrfs)        WANT_BTRFS=1 ;;
         --ext4)         WANT_BTRFS=0 ;;
         --erofs)        WANT_EROFS=1 ;;
-        --no-launch)    LAUNCH=0 ;;
+        --no-launch)    ;;   # nothing is started any more; kept so old command lines still work
         --no-cccu)      WANT_CCCU=0 ;;
         --installer-mode=clone|--installer-mode=new|--installer-mode=distro)
                         IMODE="${a#--installer-mode=}"; WANT_INSTALLER=1 ;;
@@ -1207,55 +1238,57 @@ as_root sh "$SELF" --root-phase "$FAMILY" "$INSTALLER_ON" "$ALPINE_TOOLS" "$WANT
 finalize_image_format
 
 # =============================================================================
-# Phase 1: BUILD everything, as you (nothing is installed yet)
+# Phase 1: BUILD everything, as you - nothing is installed until all of it is compiled
 # =============================================================================
 JOBS="$(nproc 2>/dev/null || echo 1)"
 GUI_OK=0; INSTALLER_OK=0; CCCU_OK=0
+R_GUI=skipped; R_INSTALL=skipped; R_CCU=skipped   # for the summary: ok | failed | skipped
+banner() { printf '\n\033[1;31m=====\033[1;97m %s \033[1;31m=====\033[0;32m\n' "$*"; }
 
-say "[build 1/4] Claude Codex Backup - the cloner (cloner/)"
-make -C "$CLONER" -j"$JOBS" || die "the cloner did not build - see the messages above"
+banner "BUILD 1/4  Claude Codex Backup - the cloner (cloner/)"
+make -C "$CLONER" -j"$JOBS" || die "Claude Codex Backup (the cloner) did not build - see the messages above"
 
 if [ "$WANT_GUI" = 1 ]; then
-    say "[build 2/4] Claude Codex Backup - the Qt6 app (cloner-qt6/)"
+    banner "BUILD 2/4  Claude Codex Backup - the Qt6 app (cloner-qt6/)"
     GEN=""
     if command -v ninja >/dev/null 2>&1 || command -v samu >/dev/null 2>&1; then GEN="-G Ninja"; fi
     # shellcheck disable=SC2086
     if cmake -S "$GUI_SRC" -B "$GUI_BUILD" $GEN -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr &&
        cmake --build "$GUI_BUILD" -j "$JOBS"; then
-        GUI_OK=1
+        GUI_OK=1; R_GUI=ok
     else
-        say "The Qt6 app did not build - it is skipped, the terminal menu ($TARGET) still works."
+        R_GUI=failed
     fi
 else
-    say "[build 2/4] Claude Codex Backup Qt6 app: skipped (--no-gui)"
+    banner "BUILD 2/4  Claude Codex Backup Qt6 app: skipped (--no-gui)"
 fi
 
 if [ "$INSTALLER_ON" = 1 ]; then
-    say "[build 3/4] Claude Codex Install (installer/, $IMODE mode, $IUI)"
+    banner "BUILD 3/4  Claude Codex Install (installer/, $IMODE mode, $IUI) - about 1000 files"
     if build_claudeinstall "$IUI"; then
-        INSTALLER_OK=1
+        INSTALLER_OK=1; R_INSTALL=ok
     else
-        say "Claude Codex Install did not build (errors: $IBUILD/errors.log) - it is skipped; fix them and run ./build.sh again."
+        R_INSTALL=failed
     fi
 else
-    say "[build 3/4] Claude Codex Install: skipped"
+    banner "BUILD 3/4  Claude Codex Install: skipped"
 fi
 
 if [ "$WANT_CCCU" = 1 ]; then
-    say "[build 4/4] Claude Codex CCU (cccu/)"
+    banner "BUILD 4/4  Claude Codex CCU (cccu/)"
     if build_cccu "$WANT_GUI"; then
-        CCCU_OK=1
+        CCCU_OK=1; R_CCU=ok
     else
-        say "Claude Codex CCU did not build (it needs GCC 14+ and CMake 3.25+) - it is skipped."
+        R_CCU=failed
     fi
 else
-    say "[build 4/4] Claude Codex CCU: skipped"
+    banner "BUILD 4/4  Claude Codex CCU: skipped"
 fi
 
 # =============================================================================
-# Phase 2: INSTALL everything that built, as root (one password prompt)
+# Phase 2: INSTALL everything that compiled, as root (one password prompt)
 # =============================================================================
-say "Installing everything that built (as root)"
+banner "INSTALL  everything that compiled (as root)"
 as_root sh "$SELF" --install-all "$GUI_OK" "$INSTALLER_OK" "$IMODE" "$BTRFS" "$EROFS" "$CCCU_OK" ||
     die "installing failed - see the messages above"
 command -v "$TARGET" >/dev/null 2>&1 || die "$TARGET is not on PATH after install"
@@ -1264,25 +1297,37 @@ command -v "$TARGET" >/dev/null 2>&1 || die "$TARGET is not on PATH after instal
 # (the shortcut opens the clone installer: not for Claude Codex Install's new / distro modes)
 if { [ "$INSTALLER_ON" = 1 ] && [ "$IMODE" = clone ]; } || [ "$ALPINE_TOOLS" = 1 ]; then add_desktop_shortcut; fi
 
-say "Done - Claude Codex Compendium v1.0 01-11-2026"
-say "  Claude Codex Backup:   $TARGET  /  claude-codex-backup  (terminal menu)"
-[ "$GUI_OK" = 1 ] && say "  Claude Codex Backup:   $GUI_TARGET  /  claude-codex-backup-gui  (applications menu)"
-if [ "$INSTALLER_ON" = 1 ]; then
-    case "$IMODE" in
-        clone) say "  Claude Codex Install:  $IUI - 'Install' shortcut / claudebackup-install in the live ISO" ;;
-        *)     say "  Claude Codex Install:  $IMODE mode: sudo claude-codex-install$([ "$IUI" != gui ] && echo '  /  sudo claude-codex-install-tui')" ;;
+# =============================================================================
+# Complete: what was built and installed, and how to start each tool. Nothing is started here.
+# =============================================================================
+banner "COMPLETE - Claude Codex Compendium v1.0 01-11-2026"
+row() {   # row TOOL RESULT HOW-TO-START
+    case "$2" in
+        ok)     _c='\033[1;92m'; _t='built + installed' ;;
+        failed) _c='\033[1;91m'; _t='FAILED' ;;
+        *)      _c='\033[1;33m'; _t='skipped' ;;
     esac
-fi
-[ "$CCCU_OK" = 1 ] && say "  Claude Codex CCU:      sudo claude-codex-ccu  /  claude-codex-ccu-gui  (applications menu)"
+    printf "  \033[1;97m%-22s\033[0m ${_c}%-18s\033[0m %s\n" "$1" "$_t" "$3"
+}
+case "$IMODE" in
+    clone) HOW_INSTALL="in the live ISO: the 'Install $DISTRO_NAME' shortcut / claudebackup-install" ;;
+    *)     HOW_INSTALL="sudo claude-codex-install$([ "$IUI" != gui ] && echo '  /  sudo claude-codex-install-tui')" ;;
+esac
+[ "$IUI" = tui ] && [ "$IMODE" = clone ] && HOW_INSTALL="$HOW_INSTALL (runs in a terminal)"
+printf '\n'
+row "Claude Codex Backup"  ok           "claude-codex-backup  (terminal menu)"
+row "  Qt6 app"            "$R_GUI"     "claude-codex-backup-gui  /  'Claude Codex Backup' in the applications menu"
+row "Claude Codex Install" "$R_INSTALL" "$HOW_INSTALL"
+row "Claude Codex CCU"     "$R_CCU"     "sudo claude-codex-ccu  /  claude-codex-ccu-gui  ('Claude Codex CCU' in the menu)"
+printf '\n'
+FAILED=0
+if [ "$R_GUI" = failed ]; then FAILED=1; say "Qt6 app: see the compiler messages above (build folder $GUI_BUILD)"; fi
+if [ "$R_INSTALL" = failed ]; then FAILED=1; say "Claude Codex Install: every error in $IBUILD/errors.log (configure: configure.log, all output: build.log)"; fi
+if [ "$R_CCU" = failed ]; then FAILED=1; say "Claude Codex CCU: see the messages above (needs GCC 14+ / Clang 17+ and CMake 3.25+; build folder $CBUILD)"; fi
 printf '\033[0m'
-
-[ "$LAUNCH" = 1 ] || exit 0
-if [ "$GUI_OK" = 1 ] && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && [ "$(id -u)" -ne 0 ]; then
-    say "Launching $GUI_TARGET"
-    printf '\033[0m'
-    nohup "$GUI_TARGET" >/dev/null 2>&1 &
-else
-    say "Launching $TARGET"
-    printf '\033[0m'
-    exec "$TARGET"
+if [ "$FAILED" = 1 ]; then
+    printf '\033[1;91mNot everything you picked was built. Fix the errors above and run ./build.sh again.\033[0m\n'
+    exit 1
 fi
+printf '\033[1;92mEverything is built and installed. Nothing was started - use the commands above.\033[0m\n'
+exit 0

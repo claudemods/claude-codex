@@ -52,7 +52,7 @@ inline int runShell(const std::string& script, const std::string& chrootPath, co
     std::string hostDir = chrootPath.empty() ? STAGING_DIR + "/run" : chrootPath + "/tmp";
     mkdirP(hostDir, chrootPath.empty() ? 0700 : 01777);
 
-    std::string tmpl = hostDir + "/cbl-exec-XXXXXX";
+    std::string tmpl = hostDir + "/ccb-exec-XXXXXX";
     std::vector<char> buf(tmpl.begin(), tmpl.end());
     buf.push_back('\0');
     int fd = mkstemp(buf.data());
@@ -366,7 +366,7 @@ inline std::string generateExcludeList(const Context& c) {
     if (startsWith(c.isoDir, "/") && c.isoDir.size() > 1) ex.push_back(c.isoDir.substr(1));
 
     for (const char* e : {
-        "boot/cbl-initrd.img",
+        "boot/ccb-initrd.img",
         "etc/fstab", "etc/crypttab", "etc/mtab",
         "etc/udev/rules.d/70-persistent-cd.rules", "etc/udev/rules.d/70-persistent-net.rules",
         "swapfile",
