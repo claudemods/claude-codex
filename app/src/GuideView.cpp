@@ -41,7 +41,7 @@ const Section kSections[] = {
 <li><b>Backup &gt; Write USB</b> - put the ISO on a stick.</li>
 <li>Boot the stick, then <b>Install &lt;distro&gt;</b> on the desktop opens Claude Codex Install.</li>
 </ol>
-<p>Every task asks for the administrator password when it needs it. Nothing runs before you press its button.</p>)" },
+<p>The administrator password is asked <b>once</b>, when the window opens; every task then runs without asking again (the header shows <i>Administrator: unlocked</i>). Cancel it and the next task that needs root asks. Nothing runs before you press its button. <b>F11</b> switches full screen; every task log has <i>Full Screen Log</i>.</p>)" },
     { "Build a live ISO",
       "media-optical",
       R"(<h2>Backup: build a live ISO</h2>

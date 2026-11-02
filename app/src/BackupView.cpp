@@ -4,6 +4,7 @@
 #include "BackupView.h"
 
 #include "AnsiLog.h"
+#include "RootSession.h"
 #include "TaskPanel.h"
 
 #include <QApplication>
@@ -323,11 +324,33 @@ BackupView::refreshStatus()
     }
     const bool ready = m_status.flag( QStringLiteral( "supported" ) ) && m_status.value( QStringLiteral( "missingTools" ) ).isEmpty()
         && m_status.flag( QStringLiteral( "bootFiles" ) );
-    m_statusBadge->setText( QStringLiteral( "<span style='color:%1'>●</span> %2<br><span style='color:#8a909c'>%3 · %4</span>" )
+    // the distro you run (CachyOS, not its family), then the size of the system from df -h:
+    // / and, when it is a separate file system, /home
+    QString disks;
+    const QStringList dfLines = runCapture( QStringLiteral( "df" ),
+                                            { QStringLiteral( "-h" ),
+                                              QStringLiteral( "--output=source,size,used,avail,pcent,target" ),
+                                              QStringLiteral( "/" ),
+                                              QStringLiteral( "/home" ) } )
+                                    .split( QLatin1Char( '\n' ), Qt::SkipEmptyParts );
+    QStringList seen;
+    for ( int i = 1; i < dfLines.size(); ++i )   // line 0 is df's header
+    {
+        const QStringList f = dfLines[ i ].simplified().split( QLatin1Char( ' ' ) );
+        if ( f.size() < 6 || seen.contains( f[ 0 ] ) )
+        {
+            continue;
+        }
+        seen << f[ 0 ];
+        disks += QStringLiteral( "<br><b>%1</b>  %2 · used %3 (%4) · free %5" ).arg( f[ 5 ], f[ 1 ], f[ 2 ], f[ 4 ], f[ 3 ] );
+    }
+    m_statusBadge->setAlignment( Qt::AlignCenter );
+    m_statusBadge->setText( QStringLiteral( "<span style='color:%1'>●</span> <b>%2</b><br><span style='color:#ffffff'>%3</span>"
+                                            "<span style='color:#8a909c'>%4</span>" )
                                 .arg( ready ? QStringLiteral( "#5fbf7a" ) : QStringLiteral( "#e5c07b" ),
                                       ready ? tr( "Ready to build" ) : tr( "Setup needed" ),
-                                      m_status.value( QStringLiteral( "familyLabel" ) ),
-                                      m_status.value( QStringLiteral( "version" ) ) ) );
+                                      m_status.value( QStringLiteral( "distro" ) ).toHtmlEscaped(),
+                                      disks ) );
     fillOverview();
     fillBuild();
     fillSettings();
@@ -1748,30 +1771,30 @@ BackupView::launchInstaller()
                                       "Use the \"Install\" shortcut on the Desktop, or run  claudebackup-install  in a terminal." ) );
         return;
     }
-    bool started = false;
-    if ( QFileInfo( launcher ).isExecutable() )
+    // as root through the window's administrator helper (no extra password); it passes this session's
+    // display on. The clone launcher matches the image type first; distro / new mode start the installer.
+    QString program = launcher;
+    if ( !QFileInfo( launcher ).isExecutable() )
     {
-        started = QProcess::startDetached( launcher, {} );
-    }
-    else
-    {
-        // no clone launcher (distro / new mode): start the installer as root with this session's display
         const QString bin = QStandardPaths::findExecutable( QStringLiteral( "claudeinstall" ) );
-        QStringList args { QStringLiteral( "env" ) };
-        for ( const char* name : { "DISPLAY", "XAUTHORITY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XDG_SESSION_TYPE" } )
-        {
-            if ( qEnvironmentVariableIsSet( name ) )
-            {
-                args << QStringLiteral( "%1=%2" ).arg( QString::fromLatin1( name ), qEnvironmentVariable( name ) );
-            }
-        }
-        args << ( bin.isEmpty() ? QStringLiteral( "/usr/bin/claudeinstall" ) : bin );
-        started = QProcess::startDetached( QStringLiteral( "pkexec" ), args );
+        program = bin.isEmpty() ? QStringLiteral( "/usr/bin/claudeinstall" ) : bin;
     }
-    if ( !started )
-    {
-        QMessageBox::warning( this, tr( "Install" ), tr( "Claude Codex Install could not be started (%1)." ).arg( launcher ) );
-    }
+    RootProcess* p = RootSession::instance()->start( program, {} );
+    p->closeWriteChannel();
+    connect( p,
+             &RootProcess::finished,
+             this,
+             [ this, p, program ]( int code, bool )
+             {
+                 p->deleteLater();
+                 if ( code != 0 )
+                 {
+                     QMessageBox::warning( this,
+                                           tr( "Install" ),
+                                           code == 126 ? tr( "Claude Codex Install was not started: the administrator password was not given." )
+                                                       : tr( "Claude Codex Install stopped with an error (exit code %1, %2)." ).arg( code ).arg( program ) );
+                 }
+             } );
 }
 
 void

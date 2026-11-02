@@ -3,6 +3,8 @@
 
 #include "Backend.h"
 
+#include "RootSession.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
@@ -24,11 +26,10 @@ Backend::Backend( QObject* parent )
 
 Backend::~Backend()
 {
-    if ( m_process && m_process->state() != QProcess::NotRunning )
+    if ( isRunning() )
     {
-        // Closing stdin makes a cancellable task stop and clean up its mounts
+        // Closing stdin makes a cancellable task stop and clean up its mounts (the helper finishes it)
         m_process->closeWriteChannel();
-        m_process->waitForFinished( 5000 );
     }
 }
 
@@ -172,9 +173,10 @@ Backend::set( const QStringList& keyValues, QString* error ) const
 bool
 Backend::isRunning() const
 {
-    return m_process && m_process->state() != QProcess::NotRunning;
+    return m_process && m_process->isRunning();
 }
 
+// Root tasks run through the window's administrator helper (RootSession): one password for the window
 bool
 Backend::startRoot( const QString& title, const QStringList& args, bool cancellable, const QByteArray& stdinData )
 {
@@ -186,10 +188,9 @@ Backend::startRoot( const QString& title, const QStringList& args, bool cancella
     {
         m_process->deleteLater();
     }
-    m_process = new QProcess( this );
-    m_process->setProcessChannelMode( QProcess::MergedChannels );
     m_buffer.clear();
     m_result.clear();
+    m_startError.clear();
     m_cancelRequested = false;
 
     QStringList clonerArgs { QStringLiteral( "--ccb-user=" ) + userName() };
@@ -199,41 +200,13 @@ Backend::startRoot( const QString& title, const QStringList& args, bool cancella
         clonerArgs << QString::fromLatin1( kCancelFlag );
     }
 
-    QString program;
-    QStringList programArgs;
-    if ( geteuid() == 0 )
-    {
-        program = clonerPath();
-        programArgs = clonerArgs;
-    }
-    else
-    {
-        // pkexec needs the absolute path the polkit rule names
-        program = QStandardPaths::findExecutable( QStringLiteral( "pkexec" ) );
-        if ( program.isEmpty() )
-        {
-            Q_EMIT taskFinished( false, false, tr( "pkexec (polkit) is not installed - it asks for the administrator password." ) );
-            return false;
-        }
-        programArgs = QStringList { clonerPath() } + clonerArgs;
-    }
-
-    connect( m_process, &QProcess::readyRead, this, &Backend::readOutput );
-    connect( m_process, &QProcess::finished, this, &Backend::onFinished );
-    connect( m_process,
-             &QProcess::errorOccurred,
-             this,
-             [ this ]( QProcess::ProcessError e )
-             {
-                 if ( e == QProcess::FailedToStart )
-                 {
-                     Q_EMIT taskFinished( false, false, tr( "Could not start %1." ).arg( m_process->program() ) );
-                 }
-             } );
-
     Q_EMIT taskStarted( title );
-    Q_EMIT output( QStringLiteral( "\x1b[36m$ %1 %2\x1b[0m\n" ).arg( program, programArgs.join( QLatin1Char( ' ' ) ) ) );
-    m_process->start( program, programArgs );
+    Q_EMIT output( QStringLiteral( "\x1b[36m$ %1 %2\x1b[0m\n" ).arg( clonerPath(), clonerArgs.join( QLatin1Char( ' ' ) ) ) );
+    m_process = RootSession::instance()->start( clonerPath(), clonerArgs );
+    connect( m_process, &RootProcess::output, this, &Backend::onOutput );
+    connect( m_process, &RootProcess::finished, this, &Backend::onFinished );
+    connect( m_process, &RootProcess::failedToStart, this, [ this ]( const QString& why ) { m_startError = why; } );
+    // a cancellable task keeps stdin open: the cloner cancels when it is closed (--cancel-on-eof)
     if ( !cancellable )
     {
         if ( !stdinData.isEmpty() )
@@ -258,18 +231,20 @@ Backend::cancel()
 }
 
 void
-Backend::readOutput()
+Backend::onOutput( const QByteArray& data )
 {
-    m_buffer += m_process->readAll();
+    m_buffer += data;
     // Whole lines: markers are taken out, everything else goes to the log
     int nl;
     while ( ( nl = m_buffer.indexOf( '\n' ) ) >= 0 )
     {
         const QByteArray line = m_buffer.left( nl );
         m_buffer.remove( 0, nl + 1 );
-        if ( line.startsWith( "@@" ) )
+        // (the pseudo-terminal of the squashfs step ends lines with \r\n)
+        const QByteArray bare = line.endsWith( '\r' ) ? line.left( line.size() - 1 ) : line;
+        if ( bare.startsWith( "@@" ) )
         {
-            handleMarker( QString::fromUtf8( line.mid( 2 ) ).trimmed() );
+            handleMarker( QString::fromUtf8( bare.mid( 2 ) ).trimmed() );
         }
         else
         {
@@ -293,7 +268,6 @@ Backend::readOutput()
         }
     }
 }
-
 void
 Backend::handleMarker( const QString& marker )
 {
@@ -309,7 +283,7 @@ Backend::handleMarker( const QString& marker )
 }
 
 void
-Backend::onFinished( int exitCode, QProcess::ExitStatus status )
+Backend::onFinished( int exitCode, bool crashed )
 {
     if ( !m_buffer.isEmpty() )
     {
@@ -317,20 +291,19 @@ Backend::onFinished( int exitCode, QProcess::ExitStatus status )
         m_buffer.clear();
     }
     const bool cancelled = m_cancelRequested || m_result == QLatin1String( "cancelled" );
-    const bool ok = !cancelled && status == QProcess::NormalExit && exitCode == 0;
+    const bool ok = !cancelled && !crashed && exitCode == 0;
     QString message;
-    if ( cancelled )
+    if ( !m_startError.isEmpty() )
+    {
+        message = m_startError;
+    }
+    else if ( cancelled )
     {
         message = tr( "Cancelled." );
     }
     else if ( ok )
     {
         message = tr( "Finished successfully." );
-    }
-    else if ( exitCode == 126 || exitCode == 127 )
-    {
-        // pkexec: the password dialog was dismissed, or the user is not allowed
-        message = tr( "Not authorised - the administrator password was not given." );
     }
     else
     {

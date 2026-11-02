@@ -8,6 +8,18 @@
   <vendor>claudemods</vendor>
   <vendor_url>https://github.com/claudemods/claude-codex</vendor_url>
 
+  <action id="org.claudemods.claude-codex.cloner">
+    <description>Unlock Claude Codex Cloner</description>
+    <message>Claude Codex Cloner needs administrator rights for its tasks (build ISOs, write USB sticks, containers, updates). You are asked once while the window is open.</message>
+    <icon_name>claude-codex-cloner</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/claude-codex-cloner</annotate>
+  </action>
+
   <action id="org.claudemods.claude-codex.ccu">
     <description>Run Claude Codex CCU (the Container Creator Utility)</description>
     <message>Claude Codex CCU needs administrator rights to create, install and manage containers</message>

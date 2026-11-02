@@ -3,6 +3,8 @@
 
 #include "CcuView.h"
 
+#include "LogWindow.h"
+
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
@@ -65,7 +67,7 @@ void openLogFolder(QWidget* parent) {
     if (!QDesktopServices::openUrl(QUrl::fromLocalFile(dir))) QMessageBox::information(parent, "Log folder", "The logs are in:\n\n" + dir);
 }
 
-// The tool's lines may carry colour codes (pkexec does not pass NO_COLOR on)
+// The tool's lines may carry colour codes (the root helper does not pass NO_COLOR on)
 QString stripAnsi(QString line) {
     static const QRegularExpression ansi("\x1b\\[[0-9;?]*[A-Za-z]");
     return line.remove(ansi);
@@ -125,7 +127,7 @@ CcuView::CcuView(QWidget* parent) : QWidget(parent) {
     header->setSpacing(14);
     header->addWidget(makeLabel("Containers", "h1"));
     auto* about = makeLabel("Claude Codex CCU - clone this system into an Incus container, install it to a drive, export it, "
-                            "or make a live ISO of a container. Each task asks for the administrator password.", "muted");
+                            "or make a live ISO of a container. Root tasks use the window's administrator password (asked once).", "muted");
     about->setWordWrap(true);
     header->addWidget(about, 1);
     col->addLayout(header);
@@ -183,6 +185,9 @@ CcuView::CcuView(QWidget* parent) : QWidget(parent) {
     result_->setObjectName("muted");
     dryRun_ = new QCheckBox("Dry run (change nothing)");
     auto* openLog = new QPushButton("Open log folder");
+    auto* fullLog = new QPushButton(QIcon::fromTheme("view-fullscreen"), "Full screen log");
+    fullLog->setToolTip("Show this log in its own full-screen window (Esc closes it)");
+    connect(fullLog, &QPushButton::clicked, this, [this] { LogWindow::open(log_, "Claude Codex CCU - " + stepLabel_->text()); });
     cancelButton_ = new QPushButton("Cancel");
     cancelButton_->setObjectName("danger");
     cancelButton_->setEnabled(false);
@@ -192,6 +197,7 @@ CcuView::CcuView(QWidget* parent) : QWidget(parent) {
     actions->addWidget(dryRun_);
     actions->addSpacing(8);
     actions->addWidget(openLog);
+    actions->addWidget(fullLog);
     actions->addWidget(cancelButton_);
     actions->addWidget(startButton_);
     b->addLayout(actions);
@@ -210,7 +216,6 @@ bool CcuView::confirmClose() {
     if (!running_) return true;
     if (QMessageBox::question(this, "Quit", "A Containers task is still running. Stop it and quit?") != QMessageBox::Yes) return false;
     stopTool();
-    if (process_) process_->waitForFinished(4000);
     return true;
 }
 CcuView::Mode CcuView::currentMode() const {
@@ -699,21 +704,35 @@ void CcuView::refreshDrives(QComboBox* box) {
 }
 
 // Asks the tool for the containers (name, state, active), without blocking the window. First as you
-// (works when you are in the incus-admin group); with askPassword, through pkexec when that fails.
-void CcuView::refreshContainers(bool askPassword) { listContainers(::geteuid() == 0, askPassword); }
+// (works when you are in the incus-admin group); with askPassword, through the administrator helper when that fails.
+void CcuView::refreshContainers(bool askPassword) {
+    // once the window is unlocked, the list is always read as root (no prompt any more)
+    listContainers(::geteuid() == 0 || RootSession::instance()->isUnlocked(), askPassword);
+}
 
 void CcuView::listContainers(bool elevated, bool askPassword) {
-    if (!table_ || !isoContainer_ || !available() || lister_) return;   // one listing at a time
-    QString program = cccuPath();
-    QStringList args = {"containers", "--plain"};
+    if (!table_ || !isoContainer_ || !available() || lister_ || rootLister_) return;   // one listing at a time
+    const QStringList args = {"containers", "--plain"};
     if (elevated && ::geteuid() != 0) {
-        program = QStandardPaths::findExecutable("pkexec");
-        if (program.isEmpty()) {
-            containerHint_->setText("pkexec (polkit) is not installed - it asks for the administrator password.");
-            return;
-        }
-        args.prepend(cccuPath());   // pkexec needs the absolute path the polkit rule names
+        // through the window's administrator helper (asks for the password only if it is not unlocked yet)
+        listOut_.clear();
+        rootLister_ = RootSession::instance()->start(cccuPath(), args);
+        connect(rootLister_, &RootProcess::output, this, [this](const QByteArray& data) { listOut_ += data; });
+        connect(rootLister_, &RootProcess::finished, this, [this](int code, bool crashed) {
+            if (rootLister_) rootLister_->deleteLater();
+            rootLister_ = nullptr;
+            if (code == 0 && !crashed) {
+                containerHint_->setText("The ACTIVE container is the one the host session (Container Plasma) shows.");
+                fillContainers(QString::fromUtf8(listOut_));
+            } else {
+                containerHint_->setText(code == 126 ? "Not listed: the administrator password was not given."
+                                                    : "The containers could not be listed - is Incus set up? (Install / Set up does it)");
+                fillContainers(QString());
+            }
+        });
+        return;
     }
+    const QString program = cccuPath();
     lister_ = new QProcess(this);
     connect(lister_, &QProcess::finished, this, [this, elevated, askPassword](int code, QProcess::ExitStatus status) {
         const QString out = QString::fromUtf8(lister_->readAllStandardOutput());
@@ -894,64 +913,47 @@ void CcuView::start() {
     runCli(buildArgs(mode), mode, "Starting ...");
 }
 
-// Runs the cccu tool with `args` as root (pkexec asks for the password) and follows its output.
-// The passwords of the new users go through stdin (--secrets-stdin), never the command line.
+// Runs the cccu tool with `args` as root, through the window's administrator helper (one password for the
+// window), and follows its output. The passwords of the new users go through stdin (--secrets-stdin),
+// never the command line.
 void CcuView::runCli(const QStringList& args, Mode mode, const QString& title) {
     if (running_) return;
     QStringList toolArgs = args;
-    secrets_.clear();
+    QByteArray secrets;
     if (mode == Install || mode == Running) {
         toolArgs << "--secrets-stdin";
-        secrets_ = common_[mode].pass->text().toUtf8() + '\n' + (mode == Install ? rootPass_->text().toUtf8() : QByteArray()) + '\n';
+        secrets = common_[mode].pass->text().toUtf8() + '\n' + (mode == Install ? rootPass_->text().toUtf8() : QByteArray()) + '\n';
     }
-    QString program = cccuPath();
-    QStringList programArgs = toolArgs;
-    if (::geteuid() != 0) {
-        program = QStandardPaths::findExecutable("pkexec");
-        if (program.isEmpty()) {
-            QMessageBox::warning(this, "Containers", "pkexec (polkit) is not installed - it asks for the administrator password.");
-            return;
-        }
-        programArgs.prepend(cccuPath());   // the absolute path the polkit rule names
-    }
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    env.insert("NO_COLOR", "1");
 
     log_->clear();
     pending_.clear();
     result_->clear();
     result_->setStyleSheet(QString());
     savedIso_.clear();
+    startError_.clear();
     bar_->setRange(0, 1);
     bar_->setValue(0);
-    stepLabel_->setText(::geteuid() != 0 ? title + "   (waiting for the administrator password)" : title);
+    stepLabel_->setText(RootSession::instance()->isUnlocked() || ::geteuid() == 0 ? title : title + "   (waiting for the administrator password)");
     runningMode_ = mode;
     consoleRun_ = args.contains("--on-console");
     rebootRun_ = args.contains("--on-reboot");
 
-    process_ = new QProcess(this);
-    process_->setProcessEnvironment(env);
-    process_->setProcessChannelMode(QProcess::MergedChannels);
-    connect(process_, &QProcess::readyRead, this, [this] { readOutput(); });
-    connect(process_, &QProcess::started, this, [this] {
-        if (!secrets_.isEmpty()) process_->write(secrets_);
-        secrets_.fill('\0');
-        secrets_.clear();
-        process_->closeWriteChannel();   // no prompt can wait for input
-    });
-    connect(process_, &QProcess::finished, this, [this](int code, QProcess::ExitStatus status) { finished(code, status); });
-    connect(process_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
-        if (error != QProcess::FailedToStart) return;
-        appendLog("Could not start " + process_->program() + " - is Claude Codex CCU installed? (./build.sh)", "#ff6b6b", true);
-        process_->deleteLater();
-        process_ = nullptr;
-        setRunning(false);
-    });
-
     appendLog("$ cccu " + args.join(' '), "#8a909c");
     setRunning(true);
-    process_->start(program, programArgs);
+    process_ = RootSession::instance()->start(cccuPath(), toolArgs);
+    connect(process_, &RootProcess::output, this, [this](const QByteArray& data) {
+        if (stepLabel_->text().endsWith("(waiting for the administrator password)")) stepLabel_->setText("Running ...");
+        readOutput(data);
+    });
+    connect(process_, &RootProcess::failedToStart, this, [this](const QString& why) { startError_ = why; });
+    connect(process_, &RootProcess::finished, this, [this](int code, bool crashed) {
+        finished(code, crashed ? QProcess::CrashExit : QProcess::NormalExit);
+    });
+    if (!secrets.isEmpty()) process_->write(secrets);
+    secrets.fill('\0');
+    process_->closeWriteChannel();   // no prompt can wait for input
 }
+
 void CcuView::cancel() {
     if (!process_ || !running_) return;
     const auto answer = QMessageBox::warning(this, "Cancel",
@@ -961,31 +963,23 @@ void CcuView::cancel() {
     stopTool();
 }
 
-// Stops the running tool. It runs as root (pkexec), so your user cannot signal it: kill asks for the
-// password once more. As root it is stopped directly.
+// Stops the running tool and everything it started (the helper signals its process group); no password.
 void CcuView::stopTool() {
-    if (!process_ || process_->state() == QProcess::NotRunning) return;
-    const qint64 pid = process_->processId();
-    if (::geteuid() == 0 || pid <= 0) {
-        process_->terminate();
-    } else {
-        const QString pkexec = QStandardPaths::findExecutable("pkexec");
-        if (!pkexec.isEmpty()) QProcess::startDetached(pkexec, {"/bin/kill", "-TERM", QString::number(pid)});
-    }
-    QTimer::singleShot(6000, this, [p = QPointer<QProcess>(process_)] {
-        if (p && p->state() != QProcess::NotRunning) p->kill();
+    if (!process_ || !process_->isRunning()) return;
+    process_->terminate();
+    QTimer::singleShot(6000, this, [p = QPointer<RootProcess>(process_)] {
+        if (p && p->isRunning()) p->kill();
     });
 }
 
-void CcuView::readOutput() {
-    pending_ += process_->readAll();
+void CcuView::readOutput(const QByteArray& data) {
+    pending_ += data;
     pending_.replace('\r', '\n');   // rsync and friends redraw their progress line with carriage returns
     for (qsizetype nl; (nl = pending_.indexOf('\n')) >= 0;) {
         handleLine(QString::fromUtf8(pending_.left(nl)));
         pending_.remove(0, nl + 1);
     }
 }
-
 void CcuView::handleLine(const QString& rawLine) {
     QString line = rawLine;
     line.remove('\r');
@@ -1033,11 +1027,10 @@ void CcuView::handleLine(const QString& rawLine) {
 }
 
 void CcuView::finished(int code, QProcess::ExitStatus status) {
-    readOutput();   // whatever the process printed last
-    if (!pending_.isEmpty()) handleLine(QString::fromUtf8(pending_));
+    if (!pending_.isEmpty()) handleLine(QString::fromUtf8(pending_));   // whatever the process printed last
     pending_.clear();
     setRunning(false);
-    process_->deleteLater();
+    if (process_) process_->deleteLater();
     process_ = nullptr;
 
     bool success = status == QProcess::NormalExit && code == 0;
@@ -1053,7 +1046,7 @@ void CcuView::finished(int code, QProcess::ExitStatus status) {
     if (success) bar_->setValue(bar_->maximum());
     stepLabel_->setText(success ? "Finished." : "Stopped.");
     result_->setText(success ? "Completed successfully."
-                     : (code == 126 || code == 127) && ::geteuid() != 0 ? QString("Not started: the administrator password was not given.")
+                     : !startError_.isEmpty() ? startError_
                      : QString("Failed (exit code %1). See the log and /var/log/cccu/.").arg(code));
     result_->setStyleSheet(success ? "color:#4cd964; font-weight:600;" : "color:#ff6b6b; font-weight:600;");
 

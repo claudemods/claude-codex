@@ -3,12 +3,16 @@
 //
 // Backend: everything the app does goes through the cloner binary (claudebackup-linux), so the GUI
 // and the terminal menu share one engine. Info commands run as the user; root commands run through
-// pkexec (polkit rule org.claudemods.claudebackup.run) with their output streamed to the GUI.
+// the window's administrator helper (RootSession: one password per window) with their output
+// streamed to the GUI.
 
 #pragma once
 
+#include "RootSession.h"
+
 #include <QHash>
 #include <QObject>
+#include <QPointer>
 #include <QProcess>
 #include <QStringList>
 
@@ -70,12 +74,13 @@ Q_SIGNALS:
     void taskFinished( bool ok, bool cancelled, const QString& message );
 
 private:
-    void readOutput();
+    void onOutput( const QByteArray& data );
     void handleMarker( const QString& marker );
-    void onFinished( int exitCode, QProcess::ExitStatus status );
+    void onFinished( int exitCode, bool crashed );
     QString runUser( const QStringList& args, int* exitCode = nullptr, const QByteArray& input = {} ) const;
 
-    QProcess* m_process = nullptr;
+    QPointer< RootProcess > m_process;   // the running root task (in the window's administrator helper)
+    QString m_startError;                // why it could not start (not authorised, ...)
     QByteArray m_buffer;
     QString m_result;   // "ok" | "fail" | "cancelled" from @@result
     bool m_cancelRequested = false;

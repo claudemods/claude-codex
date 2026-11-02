@@ -6,11 +6,14 @@
 // asks for the administrator password (polkit) when it needs it.
 
 #include "MainWindow.h"
+#include "RootHelper.h"
+#include "RootSession.h"
 
 #include <QApplication>
 #include <QIcon>
 #include <QPalette>
 #include <QStyleFactory>
+#include <QTimer>
 
 #include <unistd.h>
 
@@ -109,6 +112,15 @@ QListWidget#guideNav::item:selected { background: #2a1519; color: #ffffff; }
 int
 main( int argc, char* argv[] )
 {
+    // the administrator helper (started once through pkexec by the window itself): no window, no display
+    for ( int i = 1; i < argc; ++i )
+    {
+        if ( qstrcmp( argv[ i ], "--root-helper" ) == 0 )
+        {
+            return runRootHelper( argc, argv );
+        }
+    }
+
     QApplication app( argc, argv );
     QApplication::setApplicationName( QStringLiteral( "claude-codex-cloner" ) );
     QApplication::setApplicationDisplayName( QStringLiteral( "Claude Codex Cloner" ) );
@@ -139,10 +151,13 @@ main( int argc, char* argv[] )
 
     if ( geteuid() == 0 )
     {
-        qWarning( "claude-codex-cloner: running as root is not needed - start it as your user, it asks for the password itself." );
+        qWarning( "claude-codex-cloner: running as root is not needed - start it as your user, it asks for the password once." );
     }
 
     MainWindow w;
-    w.show();
+    w.showMaximized();   // F11: full screen
+    // one administrator password for the whole window, asked right after it opens; cancelled, the next
+    // task that needs root asks again
+    QTimer::singleShot( 400, RootSession::instance(), &RootSession::unlock );
     return app.exec();
 }

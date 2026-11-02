@@ -4,13 +4,16 @@
 // Claude Codex Cloner - the Containers tab: Claude Codex CCU (the Container Creator Utility).
 // It does not duplicate the tool: it collects the settings, runs the `cccu` command line tool with them
 // (unattended) and shows its progress and log live. The window runs as your user; each task asks for the
-// administrator password through pkexec (passwords for the new users go through stdin, never the command
-// line). Writing an ISO to USB is done on the Backup tab (Write USB), so it is not repeated here.
+// administrator password once, for the whole window (RootSession; passwords for the new users go through stdin,
+// never the command line). Writing an ISO to USB is done on the Backup tab (Write USB), so it is not repeated here.
 
 #pragma once
 
+#include "RootSession.h"
+
 #include <QByteArray>
 #include <QList>
+#include <QPointer>
 #include <QProcess>
 #include <QWidget>
 
@@ -91,7 +94,7 @@ private:
     void runCli(const QStringList& args, Mode mode, const QString& title);
     void cancel();
     void stopTool();
-    void readOutput();
+    void readOutput(const QByteArray& data);
     void handleLine(const QString& line);
     void finished(int code, QProcess::ExitStatus status);
     void setRunning(bool running);
@@ -135,7 +138,9 @@ private:
     QLineEdit* copyName_ = nullptr;
     QCheckBox* copySwitch_ = nullptr;
     QLabel* containerHint_ = nullptr;
-    QProcess* lister_ = nullptr;        // the container list being read (async)
+    QProcess* lister_ = nullptr;        // the container list being read as you (async)
+    QPointer<RootProcess> rootLister_;  // ... or through the administrator helper
+    QByteArray listOut_;
 
     QLabel* summary_ = nullptr;
     QLabel* stepLabel_ = nullptr;
@@ -146,9 +151,9 @@ private:
     QPushButton* startButton_ = nullptr;
     QPushButton* cancelButton_ = nullptr;
 
-    QProcess* process_ = nullptr;
+    QPointer<RootProcess> process_;   // the running task, in the window's administrator helper (RootSession)
+    QString startError_;              // why it could not start (not authorised ...)
     QByteArray pending_;     // output not yet ended by a newline
-    QByteArray secrets_;     // passwords for --secrets-stdin, written once the tool runs
     bool running_ = false;
     int currentStep_ = 1;
     QString stepBase_;       // "Step 3 of 12  -  Title": the detail (bytes, speed, ETA) is appended to it

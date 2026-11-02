@@ -143,9 +143,12 @@ claude-codex update
 
 ### Claude Codex Cloner — the window
 
-One window for the whole suite. Run it as your user: each task asks for the administrator
-password (polkit) when it needs it, and nothing runs before you press its button. The header shows
-whether CCU is installed and whether an update is available.
+One window for the whole suite. It opens maximised (**F11**: full screen). Run it as your user: it asks
+for the administrator password **once**, when it opens, and every task then runs without asking again
+(cancel it, and the next task that needs root asks). Nothing runs before you press its button. Every task
+log has **Full Screen Log**, which shows it live in its own full-screen window. The header shows whether
+the window is unlocked, whether CCU is installed and whether an update is available; the Backup sidebar
+shows your distro and the size, used and free space of the system (df -h).
 
 | Tab | What is on it |
 |---|---|
@@ -391,9 +394,11 @@ running system ──claudebackup-linux──▶ live ISO (squashfs/erofs image 
 | Gentoo | `/run/initramfs/live/LiveOS/squashfs.img` | `dracut` | `grub` |
 | Alpine | the cloner's own installer | `mkinitfs` | `grub` |
 
-The window runs as your user. Its root tasks go through pkexec with polkit rules that keep the
-password for a few minutes: `org.claudemods.claudebackup` (the cloner) and
-`org.claudemods.claude-codex` (`/usr/local/bin/cccu` and `/usr/local/bin/claude-codex`).
+The window runs as your user. When it opens it starts itself once more as a small administrator helper
+(`claude-codex-cloner --root-helper`, through pkexec - polkit rule `org.claudemods.claude-codex.cloner`):
+that is the one password prompt. Its root tasks run through that helper, which only starts the suite's own
+tools (the cloner, `cccu`, `claude-codex`, the installer) and stops when the window closes. In a terminal,
+`claude-codex` uses sudo as before.
 
 ## How four projects became one
 

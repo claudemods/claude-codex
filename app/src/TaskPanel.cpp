@@ -5,8 +5,10 @@
 
 #include "AnsiLog.h"
 #include "Backend.h"
+#include "LogWindow.h"
 
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QMessageBox>
 #include <QProgressBar>
@@ -32,8 +34,11 @@ TaskPanel::TaskPanel( Backend* backend, QWidget* parent )
     m_cancel = new QPushButton( tr( "Cancel" ) );
     m_cancel->setObjectName( QStringLiteral( "danger" ) );
     m_cancel->setEnabled( false );
+    auto* fullLog = new QPushButton( QIcon::fromTheme( QStringLiteral( "view-fullscreen" ) ), tr( "Full Screen Log" ) );
+    fullLog->setToolTip( tr( "Show this log in its own full-screen window (Esc closes it)" ) );
     top->addWidget( m_title, 1 );
     top->addWidget( m_elapsed );
+    top->addWidget( fullLog );
     top->addWidget( m_cancel );
     layout->addLayout( top );
 
@@ -55,6 +60,7 @@ TaskPanel::TaskPanel( Backend* backend, QWidget* parent )
     m_timer = new QTimer( this );
     m_timer->setInterval( 1000 );
     connect( m_timer, &QTimer::timeout, this, &TaskPanel::tick );
+    connect( fullLog, &QPushButton::clicked, this, [ this ]() { LogWindow::open( m_log, m_title->text() ); } );
 
     connect( m_cancel,
              &QPushButton::clicked,

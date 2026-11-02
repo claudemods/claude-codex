@@ -4,6 +4,8 @@
 #include "UpdatesView.h"
 
 #include "AnsiLog.h"
+#include "LogWindow.h"
+#include "RootSession.h"
 
 #include <QCheckBox>
 #include <QFileInfo>
@@ -165,8 +167,11 @@ UpdatesView::UpdatesView( QWidget* parent )
     m_elapsed->setWordWrap( false );
     m_cancel = button( tr( "Cancel" ), QStringLiteral( "process-stop" ), "danger" );
     m_cancel->setEnabled( false );
+    auto* fullLog = button( tr( "Full Screen Log" ), QStringLiteral( "view-fullscreen" ) );
+    fullLog->setToolTip( tr( "Show this log in its own full-screen window (Esc closes it)" ) );
     head->addWidget( m_phase, 1 );
     head->addWidget( m_elapsed );
+    head->addWidget( fullLog );
     head->addWidget( m_cancel );
     rl->addLayout( head );
     m_bar = new QProgressBar;
@@ -188,6 +193,7 @@ UpdatesView::UpdatesView( QWidget* parent )
     connect( m_check, &QPushButton::clicked, this, [ this ]() { check( false ); } );
     connect( m_update, &QPushButton::clicked, this, &UpdatesView::startUpdate );
     connect( m_cancel, &QPushButton::clicked, this, &UpdatesView::stopUpdate );
+    connect( fullLog, &QPushButton::clicked, this, [ this ]() { LogWindow::open( m_log, tr( "Updating Claude Codex" ) ); } );
 
     refreshInstalled();
 }
@@ -351,63 +357,37 @@ UpdatesView::startUpdate()
     {
         return;
     }
-    QStringList args { suiteCommand(), QStringLiteral( "update" ), QStringLiteral( "--yes" ) };
+    QStringList args { QStringLiteral( "update" ), QStringLiteral( "--yes" ) };
     if ( m_force->isChecked() )
     {
         args << QStringLiteral( "--force" );
     }
-    QString program;
-    if ( ::geteuid() == 0 )
-    {
-        program = args.takeFirst();
-    }
-    else
-    {
-        program = QStandardPaths::findExecutable( QStringLiteral( "pkexec" ) );
-        if ( program.isEmpty() )
-        {
-            QMessageBox::warning( this, tr( "Update" ), tr( "pkexec (polkit) is not installed - it asks for the administrator password." ) );
-            return;
-        }
-    }
     m_log->clearLog();
     m_buffer.clear();
     m_cancelled = false;
+    m_startError.clear();
     m_bar->setRange( 0, 1000 );
     m_bar->setValue( 0 );
     m_bar->setFormat( QString() );
     m_bar->setProperty( "state", QString() );
     m_bar->style()->unpolish( m_bar );
     m_bar->style()->polish( m_bar );
-    m_phase->setText( tr( "Waiting for the administrator password..." ) );
+    m_phase->setText( RootSession::instance()->isUnlocked() ? tr( "Updating..." ) : tr( "Waiting for the administrator password..." ) );
 
-    m_process = new QProcess( this );
-    m_process->setProcessChannelMode( QProcess::MergedChannels );
-    connect( m_process, &QProcess::readyRead, this, &UpdatesView::readOutput );
-    connect( m_process, &QProcess::finished, this, &UpdatesView::updateFinished );
-    connect( m_process, &QProcess::started, this, [ this ]() { m_process->closeWriteChannel(); } );
-    connect( m_process,
-             &QProcess::errorOccurred,
-             this,
-             [ this ]( QProcess::ProcessError e )
-             {
-                 if ( e == QProcess::FailedToStart )
-                 {
-                     m_log->appendAnsi( tr( "\x1b[91mCould not start %1\x1b[0m\n" ).arg( m_process->program() ) );
-                     m_process->deleteLater();
-                     m_process = nullptr;
-                     setBusy( false );
-                 }
-             } );
-    m_log->appendAnsi( QStringLiteral( "\x1b[36m$ %1 %2\x1b[0m\n" ).arg( program, args.join( QLatin1Char( ' ' ) ) ) );
+    m_log->appendAnsi( QStringLiteral( "\x1b[36m$ %1 %2\x1b[0m\n" ).arg( suiteCommand(), args.join( QLatin1Char( ' ' ) ) ) );
     setBusy( true );
     m_clock.start();
     m_timer->start();
     tick();
-    m_process->start( program, args );
+    // as root, through the window's administrator helper (one password for the window)
+    m_process = RootSession::instance()->start( suiteCommand(), args );
+    connect( m_process, &RootProcess::output, this, &UpdatesView::readOutput );
+    connect( m_process, &RootProcess::failedToStart, this, [ this ]( const QString& why ) { m_startError = why; } );
+    connect( m_process, &RootProcess::finished, this, &UpdatesView::updateFinished );
+    m_process->closeWriteChannel();
 }
 
-// The update runs as root: your user cannot signal it, so kill asks for the password once more
+// Stops build.sh and everything it started (the helper signals its process group)
 void
 UpdatesView::stopUpdate()
 {
@@ -418,27 +398,12 @@ UpdatesView::stopUpdate()
         return;
     }
     m_cancelled = true;
-    const qint64 pid = m_process->processId();
-    if ( ::geteuid() == 0 || pid <= 0 )
-    {
-        m_process->terminate();
-    }
-    else
-    {
-        const QString pkexec = QStandardPaths::findExecutable( QStringLiteral( "pkexec" ) );
-        if ( !pkexec.isEmpty() )
-        {
-            // the whole process group: build.sh and the compiler it runs
-            QProcess::startDetached( pkexec, { QStringLiteral( "/bin/kill" ), QStringLiteral( "-TERM" ), QStringLiteral( "--" ), QStringLiteral( "-%1" ).arg( pid ) } );
-        }
-    }
+    m_process->terminate();
 }
-
 // The output is build.sh's: its banners ("BUILD 2/4 ...", "INSTALL", "COMPLETE") and ninja's [n/m]
 void
-UpdatesView::readOutput()
+UpdatesView::readOutput( const QByteArray& chunk )
 {
-    const QByteArray chunk = m_process->readAll();
     m_log->appendAnsi( QString::fromUtf8( chunk ) );
     if ( m_phase->text() == tr( "Waiting for the administrator password..." ) )
     {
@@ -498,15 +463,14 @@ UpdatesView::readOutput()
 }
 
 void
-UpdatesView::updateFinished( int code, QProcess::ExitStatus status )
+UpdatesView::updateFinished( int code, bool crashed )
 {
-    m_log->appendAnsi( QString::fromUtf8( m_process->readAll() ) );
     m_process->deleteLater();
     m_process = nullptr;
     m_timer->stop();
     tick();
     setBusy( false );
-    const bool ok = status == QProcess::NormalExit && code == 0 && !m_cancelled;
+    const bool ok = !crashed && code == 0 && !m_cancelled;
     QString message;
     if ( ok )
     {
@@ -516,9 +480,9 @@ UpdatesView::updateFinished( int code, QProcess::ExitStatus status )
     {
         message = tr( "Cancelled." );
     }
-    else if ( code == 126 || code == 127 )
+    else if ( !m_startError.isEmpty() )
     {
-        message = tr( "Not started: the administrator password was not given." );
+        message = m_startError;
     }
     else
     {
@@ -567,6 +531,6 @@ UpdatesView::confirmClose()
     }
     return QMessageBox::question( this,
                                   tr( "Quit" ),
-                                  tr( "The update is still running. It keeps running after the window closes. Quit anyway?" ) )
+                                  tr( "The update is still running. It keeps running in the background after the window closes. Quit anyway?" ) )
         == QMessageBox::Yes;
 }

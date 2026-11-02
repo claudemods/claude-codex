@@ -46,6 +46,7 @@ private:
     CcuView* m_ccu = nullptr;   // null when Claude Codex CCU is not installed
     UpdatesView* m_updates = nullptr;
     GuideView* m_guide = nullptr;
+    QLabel* m_rootPill = nullptr;   // the administrator helper: unlocked or not
     QLabel* m_ccuPill = nullptr;
     QLabel* m_updatePill = nullptr;
 };

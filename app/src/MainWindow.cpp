@@ -6,9 +6,12 @@
 #include "BackupView.h"
 #include "CcuView.h"
 #include "GuideView.h"
+#include "RootSession.h"
 #include "UpdatesView.h"
 
 #include <QCloseEvent>
+#include <QKeySequence>
+#include <QShortcut>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QIcon>
@@ -104,6 +107,21 @@ MainWindow::MainWindow( QWidget* parent )
                  }
              } );
 
+    // F11: full screen and back (it opens maximised)
+    auto* fullScreen = new QShortcut( QKeySequence( Qt::Key_F11 ), this );
+    connect( fullScreen, &QShortcut::activated, this, [ this ]() { isFullScreen() ? showMaximized() : showFullScreen(); } );
+
+    // the administrator helper: one password for the window
+    connect( RootSession::instance(),
+             &RootSession::unlockedChanged,
+             this,
+             [ this ]( bool unlocked )
+             {
+                 setPill( m_rootPill,
+                          unlocked ? QStringLiteral( "ok" ) : QStringLiteral( "warn" ),
+                          unlocked ? tr( "Administrator: unlocked" ) : tr( "Administrator: locked" ) );
+             } );
+
     // Ask GitHub in the background once the window is up (never blocks, never updates by itself)
     QTimer::singleShot( 1500, m_updates, &UpdatesView::checkQuietly );
 }
@@ -152,6 +170,11 @@ MainWindow::makeHeader()
     m_updatePill = new QLabel;
     m_updatePill->setObjectName( QStringLiteral( "pill" ) );
     setPill( m_updatePill, QStringLiteral( "off" ), tr( "Checking for updates..." ) );
+    m_rootPill = new QLabel;
+    m_rootPill->setObjectName( QStringLiteral( "pill" ) );
+    m_rootPill->setToolTip( tr( "Root tasks run through one administrator helper: the password is asked once per window" ) );
+    setPill( m_rootPill, QStringLiteral( "off" ), tr( "Administrator: asking..." ) );
+    h->addWidget( m_rootPill );
     h->addWidget( m_ccuPill );
     h->addWidget( m_updatePill );
     return header;

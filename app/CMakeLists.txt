@@ -22,6 +22,9 @@ add_executable(claude-codex-cloner
     src/CcuView.cpp src/CcuView.h
     src/UpdatesView.cpp src/UpdatesView.h
     src/GuideView.cpp src/GuideView.h
+    src/RootSession.cpp src/RootSession.h
+    src/RootHelper.cpp src/RootHelper.h
+    src/LogWindow.cpp src/LogWindow.h
     src/Backend.cpp src/Backend.h
     src/TaskPanel.cpp src/TaskPanel.h
     src/AnsiLog.cpp src/AnsiLog.h

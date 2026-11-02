@@ -3,12 +3,15 @@
 //
 // Claude Codex Cloner - the Updates tab: one updater for the whole suite. It shows what is installed
 // (`claude-codex status --plain`), asks GitHub for the latest release (`claude-codex update --check`)
-// and updates everything with `claude-codex update --yes` through pkexec: the new source is downloaded
+// and updates everything with `claude-codex update --yes` as root (the window's administrator helper): the new source is downloaded
 // and the compendium's build.sh rebuilds and reinstalls every tool with the choices of the last build.
 
 #pragma once
 
+#include "RootSession.h"
+
 #include <QElapsedTimer>
+#include <QPointer>
 #include <QProcess>
 #include <QWidget>
 
@@ -40,8 +43,8 @@ private:
     void check( bool quiet );
     void startUpdate();
     void stopUpdate();
-    void readOutput();
-    void updateFinished( int code, QProcess::ExitStatus status );
+    void readOutput( const QByteArray& chunk );
+    void updateFinished( int code, bool crashed );
     void setBusy( bool busy );
     void tick();
 
@@ -60,7 +63,8 @@ private:
     QTimer* m_timer = nullptr;
     QElapsedTimer m_clock;
 
-    QProcess* m_process = nullptr;
+    QPointer< RootProcess > m_process;   // the update, in the window's administrator helper
+    QString m_startError;
     QProcess* m_checker = nullptr;
     QByteArray m_buffer;
     bool m_cancelled = false;
