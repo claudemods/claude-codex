@@ -81,7 +81,7 @@ const Section kSections[] = {
 <ul>
 <li><b>Desktop session</b> (GPU): the host shows a <i>Container Plasma</i> login; it runs the container's desktop through the cage compositor with the host's GPU.</li>
 <li><b>Native</b> (GPU): the container's own login screen on the console.</li>
-<li><b>Server</b> (no GPU): Plasma Wayland in software, plus remote access - <b>KRDP</b> (RDP, port 3389) and <b>SSH</b> (the host on 22, the container on 2222). The steps are printed when it finishes.</li>
+<li><b>Server</b> (no GPU): Plasma Wayland in software, plus remote access - <b>KRDP</b> (RDP, port 3389, ready on its own - log in as the container user with that account's password) and <b>SSH</b> (the host on 22, the container on 2222). The connection steps, including saving the login for Windows Remote Desktop, are printed when it finishes.</li>
 </ul>
 <h3>The tabs</h3>
 <ul>

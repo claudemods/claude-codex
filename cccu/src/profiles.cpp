@@ -50,8 +50,10 @@ std::string session_yaml() {
 }
 
 // The container owns the screen (its own login on a VT). gpu = true: Native, with the GPU passed through.
-// gpu = false: Server - no usable GPU (the only screen is the BMC / iKVM framebuffer), so no GPU device: Incus
-// would refuse to start a container whose GPU device does not exist. Plasma draws in software there (rootfs).
+// gpu = false: Server - no usable GPU (the only screen is the BMC / iKVM chip), so no GPU device: Incus
+// would refuse to start a container whose GPU device does not exist. /dev/dri is bound in instead (optional):
+// the BMC chip (ASPEED and the like) is still a DRM display device, and KWin's only backend on a real screen
+// is DRM - without it the session never starts. Plasma draws in software on it (rootfs).
 std::string screen_yaml(bool gpu) {
     std::ostringstream y;
     y << (gpu ? "description: cccu desktop - SDDM / Plasma Login on a real VT with GPU, input and sound\n"
@@ -67,6 +69,7 @@ std::string screen_yaml(bool gpu) {
         gpu_device(y);
     } else {
         y << "devices:\n";
+        bind(y, "dri", "/dev/dri", false);
     }
 
     for (int vt = 0; vt <= 7; ++vt) char_device(y, "tty" + std::to_string(vt), "/dev/tty" + std::to_string(vt));

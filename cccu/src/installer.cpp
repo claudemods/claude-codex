@@ -242,14 +242,25 @@ void print_remote_steps(const Options& o) {
     info("Remote access (server mode):");
     info("  The container installs KRDP (remote desktop) and SSH on its first boot - give it a few minutes");
     info("  with network (follow it: incus exec " + o.name + " -- journalctl -u cccu-server-remote -f).");
-    info("  1. Remote desktop: open the container's Plasma once (the server's screen / BMC console), then");
-    info("     System Settings > Remote Desktop: switch it on and add a user name + password (RDP login,");
-    info("     separate from the account password). Then connect from any RDP client (Remmina, KRDC,");
-    info("     Windows Remote Desktop, xfreerdp) to  <server-ip>:3389");
+    const std::string rdp_user = !o.container_user.empty() ? o.container_user
+                                 : !o.user.empty()         ? o.user
+                                                           : std::string("<container-user>");
+    info("  1. Remote desktop: KRDP starts with the Plasma session and shares it. Log in as " + rdp_user + " with");
+    info("     that account's own password (KRDP only accepts the user whose desktop it shares). Connect from");
+    info("     any RDP client (Remmina, KRDC, xfreerdp, Windows Remote Desktop) to  <server-ip>:3389");
+    info("     Windows Remote Desktop never asks for the password with KRDP (no NLA) - it connects without it");
+    info("     and the window just closes. Save the login once in a Windows cmd window, then connect:");
+    info("       cmdkey /generic:TERMSRV/<server-ip> /user:" + rdp_user + " /pass:<password>");
+    info("     Set or change that password with:  incus exec " + o.name + " -- sh -c 'echo \"" + rdp_user +
+         ":<password>\" | chpasswd'");
+    info("     The remote screen is the server's real output (BMC VGA, often 1024x768): pick a bigger mode in");
+    info("     the container's System Settings > Display.");
     info("  2. SSH to the host:           ssh <host-user>@<server-ip>");
     info("     SSH into the container:    ssh -p 2222 <container-user>@<server-ip>");
     info("  3. Firewall: allow TCP 3389 (RDP), 22 (host SSH) and 2222 (container SSH) - or use only SSH and");
-    info("     tunnel RDP through it:  ssh -L 3389:localhost:3389 <host-user>@<server-ip>  then RDP to localhost");
+    info("     tunnel RDP through it:  ssh -L 13389:localhost:3389 <host-user>@<server-ip>  then RDP to");
+    info("     localhost:13389 (the cmdkey target is then TERMSRV/localhost). Windows' own RDP service uses");
+    info("     3389 on the PC, so the tunnel needs another local port.");
 }
 
 void print_next_steps(const Options& o, bool started) {

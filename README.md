@@ -231,7 +231,7 @@ setting decides how it reaches the screen:
 |---|---|---|
 | **Desktop session** | a PC with a GPU | the host's SDDM offers a *Container Plasma* session; it shows the container's desktop through the cage compositor, with the GPU |
 | **Native** | a PC with a GPU | the container's own login screen on the console |
-| **Server** | a machine without a usable GPU (rented server, BMC/iKVM screen) | Plasma Wayland in software, plus remote access: **KRDP** (RDP, port 3389) and **SSH** (host on 22, container on 2222) — the setup steps are printed when it finishes |
+| **Server** | a machine without a usable GPU (rented server, BMC/iKVM screen) | Plasma Wayland in software, plus remote access: **KRDP** (RDP, port 3389, ready on its own — log in as the container user with that account's password) and **SSH** (host on 22, container on 2222) — the connection steps (including saving the login for Windows Remote Desktop) are printed when it finishes |
 
 | Containers tab | What it does |
 |---|---|
