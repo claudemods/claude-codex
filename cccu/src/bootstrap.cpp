@@ -142,7 +142,7 @@ Result copy_from_image(const fs::path& image, const fs::path& root) {
     info("Mounting the root file system image " + image.string());
     if (!run({"mount", "-o", "loop,ro", image.string(), kImageMount}).ok()) return fail("could not mount " + image.string());
     MountGuard guard{kImageMount};
-    if (!run({"rsync", "-aHAXS", "--info=progress2,stats2", std::string(kImageMount) + "/", root.string() + "/"}).ok()) {
+    if (!run({"rsync", "-aHAXS", "-h", "--info=progress2,stats2", std::string(kImageMount) + "/", root.string() + "/"}).ok()) {
         return fail("could not copy the root file system out of " + image.string());
     }
     return {};

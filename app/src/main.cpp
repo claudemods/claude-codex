@@ -72,7 +72,12 @@ QProgressBar[state="fail"]::chunk { background: #7a2630; }
 QSplitter::handle { background: transparent; width: 10px; }
 QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
 QScrollBar::handle:vertical { background: #323743; border-radius: 4px; min-height: 30px; }
+QScrollBar:horizontal { background: transparent; height: 10px; margin: 2px; }
+QScrollBar::handle:horizontal { background: #323743; border-radius: 4px; min-width: 30px; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 QScrollBar::add-line, QScrollBar::sub-line { height: 0; width: 0; }
+QSplitter#ccuSplit::handle:vertical { height: 10px; background: transparent; image: none; }
+QSplitter#ccuSplit::handle:vertical:hover { background: #2a1519; border-radius: 4px; }
 QToolTip { background: #1b1e25; color: #e6e8ec; border: 1px solid #323743; }
 QMessageBox, QInputDialog, QFileDialog { background: #1b1e25; }
 QTabWidget::pane { border: none; top: 0px; }

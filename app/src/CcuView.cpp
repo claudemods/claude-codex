@@ -30,6 +30,7 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QScrollArea>
+#include <QSplitter>
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QStyle>
@@ -65,6 +66,26 @@ void openLogFolder(QWidget* parent) {
         return;
     }
     if (!QDesktopServices::openUrl(QUrl::fromLocalFile(dir))) QMessageBox::information(parent, "Log folder", "The logs are in:\n\n" + dir);
+}
+
+// rsync's numbers for people: "74,015,735B/s" -> "70.6 MB/s", "1,234,567,890" -> "1.1 GB"; values that are
+// already short ("74.02MB/s", "1.23G") stay as they are
+QString readableSize(const QString& value) {
+    QString digits = value;
+    const bool perSecond = digits.endsWith("B/s");
+    if (perSecond) digits.chop(3);
+    digits.remove(',');
+    bool ok = false;
+    const double bytes = digits.toDouble(&ok);
+    if (!ok) return value;
+    const char* units[] = {"B", "KB", "MB", "GB", "TB"};
+    double v = bytes;
+    int u = 0;
+    while (v >= 1024.0 && u < 4) {
+        v /= 1024.0;
+        ++u;
+    }
+    return QString::number(v, 'f', u == 0 ? 0 : 1) + " " + units[u] + (perSecond ? "/s" : "");
 }
 
 // The tool's lines may carry colour codes (the root helper does not pass NO_COLOR on)
@@ -141,6 +162,7 @@ CcuView::CcuView(QWidget* parent) : QWidget(parent) {
         auto* area = new QScrollArea;
         area->setWidgetResizable(true);
         area->setFrameShape(QFrame::NoFrame);
+        area->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);   // the page fits the width; only up/down
         area->setWidget(page);
         return area;
     };
@@ -149,7 +171,6 @@ CcuView::CcuView(QWidget* parent) : QWidget(parent) {
     tabs_->addTab(scrolled(buildPage(Export)), "Export");
     tabs_->addTab(scrolled(buildIsoPage()), "Create ISO");
     tabs_->addTab(scrolled(buildContainersPage()), "Manage containers");
-    col->addWidget(tabs_, 1);
 
     // ---- bottom: progress, log, buttons ----
     auto* bottom = new QFrame;
@@ -160,6 +181,7 @@ CcuView::CcuView(QWidget* parent) : QWidget(parent) {
 
     auto* top = new QHBoxLayout;
     stepLabel_ = makeLabel("Ready.", "muted");
+    stepLabel_->setWordWrap(true);
     summary_ = makeLabel("", "readyBadge");
     top->addWidget(stepLabel_, 1);
     top->addWidget(summary_);
@@ -176,9 +198,8 @@ CcuView::CcuView(QWidget* parent) : QWidget(parent) {
     log_->setReadOnly(true);
     log_->setMaximumBlockCount(20000);
     log_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
-    log_->setFixedHeight(120);
-    log_->setLineWrapMode(QPlainTextEdit::NoWrap);
-    b->addWidget(log_);
+    log_->setMinimumHeight(140);
+    log_->setLineWrapMode(QPlainTextEdit::WidgetWidth);   // no sideways scrolling
 
     auto* actions = new QHBoxLayout;
     result_ = new QLabel;
@@ -200,8 +221,18 @@ CcuView::CcuView(QWidget* parent) : QWidget(parent) {
     actions->addWidget(fullLog);
     actions->addWidget(cancelButton_);
     actions->addWidget(startButton_);
-    b->addLayout(actions);
-    col->addWidget(bottom);
+    b->addLayout(actions);   // the buttons above the log, so they are always visible
+    b->addWidget(log_, 1);   // the log takes the rest of the space
+
+    // settings above, progress and log below: drag the handle between them to give either more room
+    auto* split = new QSplitter(Qt::Vertical);
+    split->setObjectName("ccuSplit");
+    split->setChildrenCollapsible(false);
+    split->addWidget(tabs_);
+    split->addWidget(bottom);
+    split->setStretchFactor(0, 3);
+    split->setStretchFactor(1, 2);
+    col->addWidget(split, 1);
 
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int) { refreshStatus(); });
     connect(startButton_, &QPushButton::clicked, this, [this] { start(); });
@@ -994,10 +1025,11 @@ void CcuView::handleLine(const QString& rawLine) {
         return;
     }
     // rsync's own overall progress line: "  1,234,567,890  42%   96.00MB/s    0:00:25"
-    static const QRegularExpression rsyncRe(R"(^\s*[\d.,]+\w*\s+(\d+)%\s+(\S+)\s+(\d+:\d+:\d+).*$)");
+    static const QRegularExpression rsyncRe(R"(^\s*([\d.,]+\w*)\s+(\d+)%\s+(\S+)\s+(\d+:\d+:\d+).*$)");
     if (const auto r = rsyncRe.match(line); r.hasMatch()) {
-        bar_->setValue(std::min(bar_->maximum(), (currentStep_ - 1) * 100 + r.captured(1).toInt()));
-        stepLabel_->setText(stepBase_ + "   " + r.captured(1) + "%   " + r.captured(2) + "   ETA " + r.captured(3));
+        bar_->setValue(std::min(bar_->maximum(), (currentStep_ - 1) * 100 + r.captured(2).toInt()));
+        stepLabel_->setText(QString("%1   %2%  ·  %3 copied  ·  %4  ·  ETA %5")
+                                .arg(stepBase_, r.captured(2), readableSize(r.captured(1)), readableSize(r.captured(3)), r.captured(4)));
         return;
     }
     static const QRegularExpression isoRe(R"(ISO saved: (.+?)\s{2}\()");

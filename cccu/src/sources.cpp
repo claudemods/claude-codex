@@ -235,8 +235,9 @@ Result populate(const Options& options, const fs::path& root) {
 namespace {
 
 Result clone_host(const Options& options, const fs::path& root) {
-    // progress2 = one overall line (bytes, percent, speed, ETA); stats2 = the summary (files, sizes) at the end.
-    std::vector<std::string> argv = {"rsync", "-aHAXS", "--numeric-ids", "--info=progress2,stats2"};
+    // progress2 = one overall line (size, percent, speed, ETA); stats2 = the summary (files, sizes) at the end;
+    // -h: sizes and speed in K/M/G instead of bytes.
+    std::vector<std::string> argv = {"rsync", "-aHAXS", "-h", "--numeric-ids", "--info=progress2,stats2"};
     for (const auto& pattern : clone_excludes(options)) argv.push_back("--exclude=" + pattern);
     argv.push_back("/");
     argv.push_back(root.string() + "/");
