@@ -256,9 +256,9 @@ void print_next_steps(const Options& o, bool started) {
     if (o.display == Display::Server) print_remote_steps(o);
     info("");
     if (o.display == Display::Session) {
-        info("Log in to the host's SDDM and choose the session \"Container Plasma\":");
-        info("it starts '" + o.name + "' if needed and shows its KDE Plasma fullscreen.");
-        info("Needs: the host user in the incus-admin group, and sddm + cage installed on the host.");
+        info("The host's login screen logs " + (o.user.empty() ? std::string("the user") : o.user) +
+             " in automatically to \"Container Plasma\": it starts '" + o.name + "' and shows its KDE Plasma fullscreen.");
+        info("(It uses the host user in the incus-admin group, and sddm + cage on the host - set up above.)");
         info("Shell inside it:  incus exec " + o.name + " -- su -l <user>");
         return;
     }

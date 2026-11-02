@@ -17,11 +17,12 @@ inline std::unexpected<std::string> fail(std::string message) {
 namespace color {
 inline constexpr const char* red = "\033[1;31m";
 inline constexpr const char* green = "\033[1;32m";              // what is happening
-inline constexpr const char* dark_green = "\033[0;38;5;28m";    // what the commands print
+inline constexpr const char* dark_green = "\033[0;32m";          // what the commands print (16 colours: the boot console has no more)
+inline constexpr const char* bar_rest = "\033[1;30m";            // the not-done part of a progress bar: solid dark grey
 inline constexpr const char* yellow = "\033[1;33m";
 inline constexpr const char* cyan = "\033[1;36m";
 inline constexpr const char* white = "\033[1;97m";
-inline constexpr const char* grey = "\033[0;90m";
+inline constexpr const char* grey = "\033[0;37m";                // secondary text: solid light grey (90 looks faded on the console)
 inline constexpr const char* bold = "\033[1m";
 inline constexpr const char* badge_ok = "\033[1;30;42m";        // green box: black on green
 inline constexpr const char* badge_bad = "\033[1;97;41m";       // red box: white on red

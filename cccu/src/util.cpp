@@ -111,12 +111,19 @@ std::size_t terminal_columns() {
     return 80;
 }
 
+// Solid blocks only: the done part bright green, the rest dark grey (the light-shade character "░" looks
+// see-through on the boot console)
 std::string bar(int done, int total, std::size_t width) {
     const double fraction = total > 0 ? std::min(1.0, static_cast<double>(done) / total) : 0.0;
     const std::size_t filled = static_cast<std::size_t>(fraction * static_cast<double>(width));
-    std::string text;
-    for (std::size_t i = 0; i < width; ++i) text += (i < filled) ? "█" : "░";
-    return text;
+    std::string full, rest;
+    for (std::size_t i = 0; i < width; ++i) (i < filled ? full : rest) += "█";
+    if (!color_enabled()) {
+        std::string plain;
+        for (std::size_t i = 0; i < width; ++i) plain += (i < filled) ? "#" : "-";
+        return "[" + plain + "]";
+    }
+    return paint(color::green, full) + paint(color::bar_rest, rest);
 }
 
 void erase_status() {
@@ -298,8 +305,8 @@ void step(std::string_view message) {
 
     const int percent = static_cast<int>(100.0 * (g_step - 1) / g_total_steps);
     std::cout << '\n' << paint(color::green, head + line) << '\n';
-    std::cout << "   " << paint(color::green, bar(g_step - 1, g_total_steps, 30)) << ' ' << percent << "%   elapsed "
-              << clock_text(Clock::now() - g_run_start) << std::endl;
+    std::cout << "   " << bar(g_step - 1, g_total_steps, 30) << ' ' << paint(color::white, std::to_string(percent) + "%")
+              << paint(color::cyan, "   elapsed " + clock_text(Clock::now() - g_run_start)) << std::endl;
     g_at_line_start = true;
     log_event("STEP", counter + " " + g_step_title);
 }
@@ -311,7 +318,7 @@ void status_tick() {
     const std::string tail = (g_percent >= 0 ? "  " + std::to_string(g_percent) + "%" + (g_detail.empty() ? std::string() : "  " + g_detail) : std::string()) + "  step " + clock_text(Clock::now() - g_step_start) + "  total " + clock_text(Clock::now() - g_run_start);
     const std::size_t room = columns > tail.size() + 8 ? columns - tail.size() - 8 : 10;
     std::cout << "\r\033[2K" << paint(color::cyan, std::string("[ ") + frames[g_spin++ % 4] + " ]") << ' '
-              << fit(g_step_title, std::min(room, visible_width(g_step_title))) << paint(color::grey, tail) << std::flush;
+              << paint(color::white, fit(g_step_title, std::min(room, visible_width(g_step_title)))) << paint(color::yellow, tail) << std::flush;
     g_status_visible = true;
 }
 
@@ -357,8 +364,9 @@ void print_banner() {
 ░╚════╝░╚══════╝╚═╝░░╚═╝░╚═════╝░╚═════╝░╚══════╝╚═╝░░░░░╚═╝░╚════╝░╚═════╝░╚═════╝░)BANNER";
     if (color_enabled()) std::cout << color::reset;
     std::cout << '\n'
-              << paint(color::white, std::string("Claude Codex CCU  -  Container Creator Utility  -  Compendium v") + CCCU_VERSION + " " + CCCU_DATE) << '\n'
-              << paint(color::grey, "Sailing The Seven Seas like Penguin's Eggs, Remastersys, Refracta, Systemback and father Knoppix!")
+              << paint(color::white, "Claude Codex CCU  -  Container Creator Utility  -  ")
+              << paint(color::cyan, std::string("Compendium v") + CCCU_VERSION + " " + CCCU_DATE) << '\n'
+              << paint(color::cyan, "Sailing The Seven Seas like Penguin's Eggs, Remastersys, Refracta, Systemback and father Knoppix!")
               << '\n'
               << std::endl;
     g_at_line_start = true;

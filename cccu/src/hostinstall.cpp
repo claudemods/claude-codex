@@ -193,6 +193,33 @@ Result stage_desktop(const Options& o) {
     // Native mode: once the container runs, its display manager owns VT1, so the host's getty goes.
     const std::string mask_getty =
         container_owns_screen(o.display) ? "ExecStartPost=/usr/bin/systemctl mask --now getty@tty1.service\n" : "";
+    // Desktop session (GPU): when the container is made, the host's login screen starts and logs the user in
+    // to "Container Plasma" by itself. Checked in the background: if it does not come up within a minute,
+    // VT1 shows why (the display manager's log) instead of a bare console.
+    std::string handover;
+    if (o.display == Display::Session) {
+        const std::string script =
+            "#!/bin/sh\n"
+            "# CCCU: after the first boot, the host's login screen must log in to Container Plasma by itself.\n"
+            "# If it has not started within a minute, show why on the screen instead of a bare console.\n"
+            "i=0\n"
+            "while [ $i -lt 60 ]; do\n"
+            "    systemctl is-active -q display-manager.service && exit 0\n"
+            "    sleep 1; i=$((i + 1))\n"
+            "done\n"
+            "chvt 1 2>/dev/null\n"
+            "{\n"
+            "    printf '\\033[1;31m%s\\033[0m\\n' 'The login screen did not start, so Container Plasma could not log in. Why:'\n"
+            "    journalctl -b -u display-manager -u sddm -u plasmalogin -n 40 --no-pager\n"
+            "    printf '\\033[1;36m%s\\033[0m\\n' 'Host console: tty2 (Ctrl+Alt+F2, root). Details: /var/log/cccu/container.log'\n"
+            "} >/dev/tty1 2>&1\n";
+        if (auto r = write_text(target / "usr/local/lib/cccu/handover.sh", script,
+                                fs::perms::owner_all | fs::perms::group_read | fs::perms::group_exec | fs::perms::others_read | fs::perms::others_exec);
+            !r) {
+            return r;
+        }
+        handover = "ExecStopPost=-/usr/bin/systemd-run --no-block --unit=cccu-handover /bin/sh /usr/local/lib/cccu/handover.sh\n";
+    }
 
     const std::string unit =
         "[Unit]\n"
@@ -217,7 +244,7 @@ Result stage_desktop(const Options& o) {
         "ExecStart=" + command + "\n" + mask_getty +
         "ExecStartPost=/usr/bin/rm -f " + staged + "\n"
         "ExecStartPost=/usr/bin/systemctl disable cccu-firstboot.service\n"
-        "ExecStopPost=-/usr/bin/kill -s RTMIN+20 1\n\n"
+        "ExecStopPost=-/usr/bin/kill -s RTMIN+20 1\n" + handover + "\n"
         "[Install]\n"
         "WantedBy=multi-user.target\n";
     if (auto r = write_text(target / "etc/systemd/system/cccu-firstboot.service", unit); !r) return r;
@@ -411,10 +438,16 @@ Result install_to_drive(Options o) {
     if (auto r = stage_desktop(o); !r) return r;
 
     ok("Installation complete.");
-    info("Reboot into the new system. It boots to a text console; on that first boot it creates the");
-    info("desktop container from your image. CCCU shows live progress on that screen (VT1); the log is");
-    info("also in: journalctl -u cccu-firstboot -f (tty2),");
-    info("then the container's login screen appears on VT1. Log in on tty2 as root for the host.");
+    info("Reboot into the new system. On that first boot it creates the desktop container from your image,");
+    info("with live progress on the screen (VT1).");
+    if (o.display == Display::Session) {
+        info("Then it logs " + (o.user.empty() ? std::string("you") : o.user) + " in automatically to \"Container Plasma\" - nothing to type.");
+    } else if (o.display == Display::Native) {
+        info("Then the container's own login screen takes over the screen.");
+    } else {
+        info("Then the container's Plasma starts in software on the screen; remote access is printed at the end.");
+    }
+    info("Only for maintenance: the host's own console is on tty2 (Ctrl+Alt+F2, root).");
     info("Logs on the new system:  /var/log/cccu/install.log   (this install)");
     info("                         /var/log/cccu/container.log (container creation + diagnostics)");
     return {};
