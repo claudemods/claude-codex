@@ -27,6 +27,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QScrollArea>
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QStyle>
@@ -133,11 +134,19 @@ CcuView::CcuView(QWidget* parent) : QWidget(parent) {
     tabs_ = new QTabWidget;
     tabs_->setObjectName("subTabs");
     tabs_->setDocumentMode(true);
-    tabs_->addTab(buildPage(Install), "Install to a drive");
-    tabs_->addTab(buildPage(Running), "Set up on this system");
-    tabs_->addTab(buildPage(Export), "Export");
-    tabs_->addTab(buildIsoPage(), "Create ISO");
-    tabs_->addTab(buildContainersPage(), "Manage containers");
+    // each page scrolls when the window is small, so the settings are never squeezed together
+    const auto scrolled = [](QWidget* page) {
+        auto* area = new QScrollArea;
+        area->setWidgetResizable(true);
+        area->setFrameShape(QFrame::NoFrame);
+        area->setWidget(page);
+        return area;
+    };
+    tabs_->addTab(scrolled(buildPage(Install)), "Install to a drive");
+    tabs_->addTab(scrolled(buildPage(Running)), "Set up on this system");
+    tabs_->addTab(scrolled(buildPage(Export)), "Export");
+    tabs_->addTab(scrolled(buildIsoPage()), "Create ISO");
+    tabs_->addTab(scrolled(buildContainersPage()), "Manage containers");
     col->addWidget(tabs_, 1);
 
     // ---- bottom: progress, log, buttons ----

@@ -729,9 +729,7 @@ inline bool runMksquashfs(const Context& c, const std::string& dest) {
         // exclude list so the work directory and host-only files stay out
         std::string comp = algo == "xz" ? "-comp xz -b 256K -Xbcj x86"
                                         : "-comp " + algo + (algo == "zstd" ? " -Xcompression-level " + std::to_string(lvl) : "") + " -b 256K";
-        // -progress: mksquashfs only draws its progress bar on a terminal by itself; in Claude Codex
-        // Cloner its output is a pipe, so the bar has to be asked for (it looks the same in both)
-        cmd = "mksquashfs " + shq(src) + " " + shq(dest) + " -noappend -progress " + comp +
+        cmd = "mksquashfs " + shq(src) + " " + shq(dest) + " -noappend " + comp +
             " -wildcards -p 'mnt d 0755 root root' -p 'media d 0755 root root' -ef " + shq(c.excludeList);
     } else {
         cmd = "mksquashfs " + shq(src) + " " + shq(dest) +
@@ -741,9 +739,15 @@ inline bool runMksquashfs(const Context& c, const std::string& dest) {
     }
 
     logNormal("Running: " + cmd);
+    // mksquashfs draws its progress bar only on a terminal. In Claude Codex Cloner our output is a pipe,
+    // so the very same command runs inside a pseudo-terminal (util-linux script, 100 columns): its
+    // animation then reaches the window exactly as it looks in Konsole. The command itself is unchanged.
+    std::string run = cmd;
+    if (!isatty(STDOUT_FILENO) && commandExists("script"))
+        run = "script -qefc " + shq("stty cols 100 rows 40 2>/dev/null; " + cmd) + " /dev/null </dev/null";
     // mksquashfs draws its progress bar on our terminal: print it in dark green
     std::cout << COLOR_OUTPUT << std::flush;
-    bool ok = runCommand(cmd) == 0;
+    bool ok = runCommand(run) == 0;
     std::cout << COLOR_RESET << std::flush;
     logNormal("Unmounting bind mount...");
     if (!unbindRoot(src)) ok = false;

@@ -241,7 +241,16 @@ std::string statusBlock() {
     if (d.family == "archlinux") s += checkLine(remaster::mkinitcpioConfigReady(), "mkinitcpio Config");
     if (d.family == "archlinux")
         s += checkLine(!mcfg.isoTag.empty(), "ISO Tag: " + (mcfg.isoTag.empty() ? std::string("2026 (default)") : mcfg.isoTag));
-    if (remaster::installerAvailable(d)) s += checkLine(remaster::installerReady(), INSTALLER_NAME + " (clone installer)");
+    if (remaster::installerAvailable(d)) {
+        const std::string mode = remaster::installerMode();
+        const bool installed = commandExists(INSTALLER_BIN) || commandExists(INSTALLER_BIN + "-tui");
+        s += checkLine(installed && !mode.empty(),
+                       INSTALLER_NAME + (!installed       ? std::string(": not installed")
+                                         : mode.empty()   ? std::string(": installed, not configured")
+                                         : mode == "clone" ? std::string(": installs this clone")
+                                         : mode == "distro" ? std::string(": distro mode (claudemods distros online)")
+                                                            : std::string(": new-system mode")));
+    }
     if (d.family == "alpine") s += checkLine(remaster::alpineInstallerReady(), "Alpine Installer Tools");
     s += checkLine(!mcfg.isoName.empty(), "ISO Name: " + (mcfg.isoName.empty() ? std::string("Auto") : mcfg.isoName));
     s += checkLine(true, "Work Directory: " + (mcfg.workDir.empty() ? DEFAULT_WORK_DIR : mcfg.workDir));
@@ -728,11 +737,21 @@ void installClonedSystem() {
 // launcher, which first matches the unpack settings to the ISO's real image type (squashfs / erofs).
 // ---------------------------------------------------------------------------
 bool launchInstaller() {
-    if (!remaster::installerReady()) {
-        logError(INSTALLER_NAME + " is not set up - run the compendium's build.sh and answer yes to " + INSTALLER_NAME + ".");
+    // installed and configured in any mode (clone, new, distro) - only the clone mode has the launcher
+    const bool installed = commandExists(INSTALLER_BIN) || commandExists(INSTALLER_BIN + "-tui");
+    if (!installed || remaster::installerMode().empty()) {
+        logError(INSTALLER_NAME + (installed ? " is installed but not configured" : " is not installed") +
+                 " - run the compendium's build.sh and answer yes to " + INSTALLER_NAME + ".");
         return false;
     }
-    const std::string cmd = isRegularFile(INSTALLER_LAUNCHER) ? INSTALLER_LAUNCHER : INSTALLER_BIN;
+    std::string cmd = INSTALLER_BIN;
+    if (remaster::installerReady() && isRegularFile(INSTALLER_LAUNCHER)) cmd = INSTALLER_LAUNCHER;
+    else if (!commandExists(INSTALLER_BIN) || (getenv("DISPLAY") == nullptr && getenv("WAYLAND_DISPLAY") == nullptr))
+        cmd = INSTALLER_BIN + "-tui";   // no window possible here: the terminal installer
+    if (!commandExists(cmd) && !isRegularFile(cmd)) {
+        logError(cmd + " is not installed (build.sh: installer interface tui or both).");
+        return false;
+    }
     logNormal("Starting " + INSTALLER_NAME + " (" + cmd + ")...");
     if (runCommand(cmd) != 0) {
         logError(INSTALLER_NAME + " stopped with an error (log: /tmp/claudecodexbackup-install-" + std::to_string(getuid()) + ".log).");
@@ -783,7 +802,7 @@ std::vector<std::string> mainMenuItems() {
         "Check Disk Usage",
         "Install ISO To USB",
         onFamily("alpine") ? "Install Cloned System To Disk" : "Launch " + INSTALLER_NAME,
-        "Update claudebackup-linux",
+        "Update Claude Codex (every tool)",
         "Exit"
     };
 }

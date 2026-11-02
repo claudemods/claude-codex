@@ -17,6 +17,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QScrollArea>
 #include <QStandardPaths>
 #include <QStyle>
 #include <QTimer>
@@ -90,7 +91,16 @@ UpdatesView::suiteCommand()
 UpdatesView::UpdatesView( QWidget* parent )
     : QWidget( parent )
 {
-    auto* l = new QVBoxLayout( this );
+    // the page scrolls when the window is small, so nothing is squeezed on top of each other
+    auto* outer = new QVBoxLayout( this );
+    outer->setContentsMargins( 0, 0, 0, 0 );
+    auto* area = new QScrollArea;
+    area->setWidgetResizable( true );
+    area->setFrameShape( QFrame::NoFrame );
+    auto* content = new QWidget;
+    area->setWidget( content );
+    outer->addWidget( area );
+    auto* l = new QVBoxLayout( content );
     l->setContentsMargins( 28, 22, 28, 20 );
     l->setSpacing( 14 );
 
@@ -115,8 +125,8 @@ UpdatesView::UpdatesView( QWidget* parent )
     il->addWidget( m_release );
     il->addWidget( m_details );
     m_tools = new QGridLayout;
-    m_tools->setHorizontalSpacing( 16 );
-    m_tools->setVerticalSpacing( 6 );
+    m_tools->setHorizontalSpacing( 18 );
+    m_tools->setVerticalSpacing( 8 );
     il->addLayout( m_tools );
     il->addStretch( 1 );
     top->addWidget( installed, 3 );
@@ -165,8 +175,12 @@ UpdatesView::UpdatesView( QWidget* parent )
     m_bar->setFormat( QString() );
     rl->addWidget( m_bar );
     m_log = new AnsiLog;
+    m_log->setMinimumHeight( 300 );
     rl->addWidget( m_log, 1 );
     l->addWidget( run, 1 );
+    // the cards above keep their natural height; only the log grows
+    installed->setSizePolicy( QSizePolicy::Preferred, QSizePolicy::Maximum );
+    upd->setSizePolicy( QSizePolicy::Preferred, QSizePolicy::Maximum );
 
     m_timer = new QTimer( this );
     m_timer->setInterval( 1000 );
@@ -227,10 +241,15 @@ UpdatesView::refreshInstalled()
             // tool=Name|command|/full/path (empty path: not installed)
             const QStringList f = kv.second.split( QLatin1Char( '|' ) );
             const bool there = !f.value( 2 ).isEmpty();
+            // one line each (word wrap in a grid squeezes the rows together)
             auto* name = label( f.value( 0 ), "fieldLabel" );
+            name->setWordWrap( false );
             auto* cmd = label( f.value( 1 ), "muted" );
+            cmd->setWordWrap( false );
             auto* pill = new QLabel( there ? tr( "installed" ) : tr( "not installed" ) );
             pill->setObjectName( QStringLiteral( "pill" ) );
+            pill->setAlignment( Qt::AlignCenter );
+            pill->setSizePolicy( QSizePolicy::Fixed, QSizePolicy::Fixed );
             setState( pill, there ? QStringLiteral( "ok" ) : QStringLiteral( "off" ) );
             pill->setToolTip( f.value( 2 ) );
             m_tools->addWidget( name, row, 0 );

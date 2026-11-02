@@ -216,7 +216,7 @@ BackupView::BackupView( QWidget* parent )
         { tr( "Settings" ), QStringLiteral( "preferences-system" ) },
         { tr( "Edit Configs" ), QStringLiteral( "document-edit" ) },
         { tr( "Write USB" ), QStringLiteral( "drive-removable-media" ) },
-        { tr( "Install" ), QStringLiteral( "system-software-install" ) },
+        { tr( "Install" ), QStringLiteral( "drive-harddisk" ) },
         { tr( "Maintenance" ), QStringLiteral( "applications-utilities" ) },
     };
     for ( const auto& n : navItems )

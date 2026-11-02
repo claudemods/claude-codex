@@ -30,7 +30,9 @@ QMainWindow, #pages, QScrollArea, QScrollArea > QWidget > QWidget { background: 
 #nav { background: transparent; border: none; outline: none; }
 #nav::item { padding: 10px 10px; margin: 2px 0; border-radius: 8px; color: #b9bec8; }
 #nav::item:hover { background: #1b1e25; color: #ffffff; }
-#nav::item:selected { background: #d7263d; color: #ffffff; }
+#nav { selection-background-color: transparent; }
+#nav::item:selected { background: #2a1519; color: #ffffff; border-left: 3px solid #d7263d; font-weight: 600; }
+#nav::item:selected:hover { background: #33181d; }
 #badge { background: #171a20; border: 1px solid #262a33; border-radius: 8px; padding: 10px; color: #cfd3da; }
 #pageTitle { font-size: 20pt; font-weight: 700; color: #ffffff; }
 #section { font-size: 11pt; font-weight: 700; color: #ffffff; padding-bottom: 6px; }

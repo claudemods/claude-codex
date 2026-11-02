@@ -14,6 +14,7 @@
 #include <QIcon>
 #include <QLabel>
 #include <QPushButton>
+#include <QScreen>
 #include <QStyle>
 #include <QTabWidget>
 #include <QTimer>
@@ -30,8 +31,10 @@ MainWindow::MainWindow( QWidget* parent )
 {
     setWindowTitle( tr( "Claude Codex Cloner - %1" ).arg( QString::fromLatin1( kRelease ) ) );
     setWindowIcon( QIcon::fromTheme( QStringLiteral( "claude-codex-cloner" ), QIcon::fromTheme( QStringLiteral( "drive-harddisk" ) ) ) );
-    setMinimumSize( 1180, 760 );
-    resize( 1320, 860 );
+    // never bigger than the screen (scaled desktops have less room): pages scroll when it is small
+    setMinimumSize( 960, 640 );
+    const QRect avail = screen() ? screen()->availableGeometry() : QRect( 0, 0, 1320, 860 );
+    resize( qMin( 1320, avail.width() * 94 / 100 ), qMin( 860, avail.height() * 92 / 100 ) );
 
     auto* central = new QWidget;
     auto* col = new QVBoxLayout( central );
