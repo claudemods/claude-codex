@@ -196,8 +196,8 @@ Result stage_desktop(const Options& o) {
     // Desktop session (GPU): when the container is made, SDDM logs the user straight in to the "Container
     // Plasma" session (cccu-session: cage showing the container's Plasma) - no login screen is ever shown.
     // Checked in the background: if that session is not running within 90 s, the reasons go to
-    // /var/log/cccu/session-check.log and a red summary is shown above the text login on tty2 (where you
-    // end up then), so it can be read - and photographed - without logging in.
+    // /var/log/cccu/session-check.log and a red summary is shown above a text login on VT1 - the screen the
+    // first-boot progress was on - so it can be read (and photographed) without logging in.
     std::string handover;
     if (o.display == Display::Session) {
         const std::string user = o.user.empty() ? std::string("root") : o.user;   // the host user SDDM logs in
@@ -232,8 +232,11 @@ Result stage_desktop(const Options& o) {
             "    printf '\\033[1;33m%s\\033[0m\\n' 'Session:'; echo \"$SESSION\" | sed 's/\\\\/\\\\\\\\/g'\n"
             "    printf '\\033[1;36m%s\\033[0m\\n\\n' 'Everything: /var/log/cccu/session-check.log (log in as root to read it)'\n"
             "} > \"$ISSUE\"\n"
-            "systemctl restart getty@tty2.service 2>/dev/null\n"
-            "chvt 2 2>/dev/null\n";
+            "# show it where you are: the first screen (VT1). The display manager failed, so it gives the screen\n"
+            "# back and a text login with this report above it takes VT1.\n"
+            "systemctl stop display-manager.service 2>/dev/null\n"
+            "systemctl start getty@tty1.service 2>/dev/null\n"
+            "chvt 1 2>/dev/null\n";
         if (auto r = write_text(target / "usr/local/lib/cccu/handover.sh", script,
                                 fs::perms::owner_all | fs::perms::group_read | fs::perms::group_exec | fs::perms::others_read | fs::perms::others_exec);
             !r) {
@@ -463,7 +466,7 @@ Result install_to_drive(Options o) {
     info("with live progress on the screen (VT1).");
     if (o.display == Display::Session) {
         info("Then it logs " + (o.user.empty() ? std::string("you") : o.user) + " in automatically to \"Container Plasma\" - nothing to type.");
-        info("If that session cannot start, the reason is shown above the text login on tty2");
+        info("If that session cannot start, the reason is shown on the same screen, above a text login");
         info("(all details: /var/log/cccu/session-check.log).");
     } else if (o.display == Display::Native) {
         info("Then the container's own login screen takes over the screen.");
