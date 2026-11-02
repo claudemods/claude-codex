@@ -193,26 +193,47 @@ Result stage_desktop(const Options& o) {
     // Native mode: once the container runs, its display manager owns VT1, so the host's getty goes.
     const std::string mask_getty =
         container_owns_screen(o.display) ? "ExecStartPost=/usr/bin/systemctl mask --now getty@tty1.service\n" : "";
-    // Desktop session (GPU): when the container is made, the host's login screen starts and logs the user in
-    // to "Container Plasma" by itself. Checked in the background: if it does not come up within a minute,
-    // VT1 shows why (the display manager's log) instead of a bare console.
+    // Desktop session (GPU): when the container is made, SDDM logs the user straight in to the "Container
+    // Plasma" session (cccu-session: cage showing the container's Plasma) - no login screen is ever shown.
+    // Checked in the background: if that session is not running within 90 s, the reasons go to
+    // /var/log/cccu/session-check.log and a red summary is shown above the text login on tty2 (where you
+    // end up then), so it can be read - and photographed - without logging in.
     std::string handover;
     if (o.display == Display::Session) {
+        const std::string user = o.user.empty() ? std::string("root") : o.user;   // the host user SDDM logs in
         const std::string script =
             "#!/bin/sh\n"
-            "# CCCU: after the first boot, the host's login screen must log in to Container Plasma by itself.\n"
-            "# If it has not started within a minute, show why on the screen instead of a bare console.\n"
+            "# CCCU: after the first boot, SDDM must log " + user + " in to Container Plasma (cage + the container).\n"
+            "LOG=/var/log/cccu/session-check.log\n"
+            "ISSUE=/etc/issue.d/cccu.issue\n"
+            "mkdir -p /var/log/cccu /etc/issue.d\n"
             "i=0\n"
-            "while [ $i -lt 60 ]; do\n"
-            "    systemctl is-active -q display-manager.service && exit 0\n"
+            "while [ $i -lt 90 ]; do\n"
+            "    if pgrep -f /usr/local/bin/cccu-session >/dev/null 2>&1 && pgrep -x cage >/dev/null 2>&1; then\n"
+            "        rm -f \"$ISSUE\"; echo \"$(date): Container Plasma is running\" >> \"$LOG\"; exit 0\n"
+            "    fi\n"
             "    sleep 1; i=$((i + 1))\n"
             "done\n"
-            "chvt 1 2>/dev/null\n"
+            "HOME_DIR=$(getent passwd '" + user + "' | cut -d: -f6)\n"
             "{\n"
-            "    printf '\\033[1;31m%s\\033[0m\\n' 'The login screen did not start, so Container Plasma could not log in. Why:'\n"
+            "    echo \"=== $(date): Container Plasma did not start for " + user + "\"\n"
+            "    echo '--- display manager:'; systemctl is-active display-manager.service\n"
             "    journalctl -b -u display-manager -u sddm -u plasmalogin -n 40 --no-pager\n"
-            "    printf '\\033[1;36m%s\\033[0m\\n' 'Host console: tty2 (Ctrl+Alt+F2, root). Details: /var/log/cccu/container.log'\n"
-            "} >/dev/tty1 2>&1\n";
+            "    echo '--- session log (wayland-session.log):'; tail -n 40 \"$HOME_DIR/.local/share/sddm/wayland-session.log\" 2>&1\n"
+            "    echo '--- container:'; incus list " + o.name + " 2>&1; incus info " + o.name + " --show-log 2>&1 | tail -n 30\n"
+            "    echo '--- GPU:'; lspci -nnk 2>/dev/null | grep -A3 -Ei 'vga|3d|display'\n"
+            "    echo '--- groups of " + user + ":'; id '" + user + "'\n"
+            "} >> \"$LOG\" 2>&1\n"
+            "REASON=$(journalctl -b -u display-manager -u sddm -n 200 --no-pager 2>/dev/null | grep -Ei 'error|fail|cannot|denied' | tail -n 6)\n"
+            "SESSION=$(tail -n 6 \"$HOME_DIR/.local/share/sddm/wayland-session.log\" 2>/dev/null)\n"
+            "{\n"
+            "    printf '\\033[1;31m%s\\033[0m\\n' 'Container Plasma did not start (GPU desktop session).'\n"
+            "    printf '\\033[1;33m%s\\033[0m\\n' 'Display manager:'; echo \"$REASON\" | sed 's/\\\\/\\\\\\\\/g'\n"
+            "    printf '\\033[1;33m%s\\033[0m\\n' 'Session:'; echo \"$SESSION\" | sed 's/\\\\/\\\\\\\\/g'\n"
+            "    printf '\\033[1;36m%s\\033[0m\\n\\n' 'Everything: /var/log/cccu/session-check.log (log in as root to read it)'\n"
+            "} > \"$ISSUE\"\n"
+            "systemctl restart getty@tty2.service 2>/dev/null\n"
+            "chvt 2 2>/dev/null\n";
         if (auto r = write_text(target / "usr/local/lib/cccu/handover.sh", script,
                                 fs::perms::owner_all | fs::perms::group_read | fs::perms::group_exec | fs::perms::others_read | fs::perms::others_exec);
             !r) {
@@ -442,6 +463,8 @@ Result install_to_drive(Options o) {
     info("with live progress on the screen (VT1).");
     if (o.display == Display::Session) {
         info("Then it logs " + (o.user.empty() ? std::string("you") : o.user) + " in automatically to \"Container Plasma\" - nothing to type.");
+        info("If that session cannot start, the reason is shown above the text login on tty2");
+        info("(all details: /var/log/cccu/session-check.log).");
     } else if (o.display == Display::Native) {
         info("Then the container's own login screen takes over the screen.");
     } else {
